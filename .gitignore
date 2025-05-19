@@ -1,0 +1,31 @@
+# Ignore virtual environments
+.venv/
+env/
+venv/
+
+# Ignore PyCharm and VSCode settings
+.idea/
+.vscode/
+
+# Ignore OS and Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.log
+
+# Ignore environment files
+.env
+/.env
+
+# Ignore compiled files
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Ignore temporary files
+*.swp
+*.bak
+*.tmp
+

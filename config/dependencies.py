@@ -1,0 +1,20 @@
+import httpx
+from openai import OpenAI
+from fastapi import Depends
+from config import Settings
+from functools import lru_cache
+
+
+@lru_cache()
+def get_http_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient()
+
+
+@lru_cache()
+def get_opensubtitles_client(http_client: httpx.AsyncClient = Depends(get_http_client)):
+    return OpenSubtitlesClient(api_key=Settings.OPENSUBTITLES_API_KEY, http_client=http_client)
+
+
+@lru_cache()
+def get_openai_client():
+    return OpenAI(api_key=Settings.OPENAI_API_KEY)
