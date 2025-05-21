@@ -16,7 +16,7 @@ def build_base_filter(
     """
     base_filter = {}
     if genre:
-        base_filter["genres.name"] = genre
+        base_filter["genres"] = genre
     if language:
         base_filter["spoken_languages.name"] = language or Settings.TMDB_LANGUAGE
     if country:
@@ -44,13 +44,21 @@ def get_projection_fields(asset_type: str) -> Dict:
             "release_date": 1,
             "runtime": 1,
             "genres": 1,
+            "original_language": 1,
             "spoken_languages": 1,
             "origin_country": 1,
-            "imdb_id": 1,
+            "external_ids": 1,
             "status": 1,
+            "tagline": 1,
+            "vote_average": 1,
+            "vote_count": 1,
             "cast": 1,
             "crew": 1,
-            "created_at": 1
+            "images": 1,
+            "videos": 1,
+            "watch_providers": 1,
+            "created_at": 1,
+            "updated_at": 1
         }
     elif asset_type == "tv":
         return {
@@ -64,25 +72,34 @@ def get_projection_fields(asset_type: str) -> Dict:
             "last_air_date": 1,
             "number_of_seasons": 1,
             "number_of_episodes": 1,
-            "episode_run_time": 1,
             "genres": 1,
+            "original_language": 1,
             "spoken_languages": 1,
             "origin_country": 1,
-            "imdb_id": 1,
+            "external_ids": 1,
             "status": 1,
+            "tagline": 1,
+            "vote_average": 1,
+            "vote_count": 1,
             "cast": 1,
             "crew": 1,
+            "images": 1,
+            "videos": 1,
+            "watch_providers": 1,
             "seasons": {
                 "season_number": 1,
+                "name": 1,
+                "overview": 1,
+                "episode_count": 1,
                 "episodes": {
+                    "season_number": 1,
                     "episode_number": 1,
                     "name": 1,
                     "overview": 1,
-                    "air_date": 1,
-                    "runtime": 1
                 }
             },
-            "created_at": 1
+            "created_at": 1,
+            "updated_at": 1
         }
     return {}
 

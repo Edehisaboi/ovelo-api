@@ -64,12 +64,13 @@ async def create_movie_indexes(collection: Collection):
     movie_indexes = [
         # Unique indexes for identifiers
         IndexModel([("tmdb_id", ASCENDING)], unique=True),
-        IndexModel([("imdb_id", ASCENDING)], unique=True, sparse=True),
+        IndexModel([("external_ids.imdb_id", ASCENDING)], unique=True, sparse=True),
         
         # Text indexes for searchable fields
         IndexModel([
             ("title", TEXT),
-            ("original_title", TEXT)
+            ("original_title", TEXT),
+            ("tagline", TEXT)
         ], name="movie_text_search"),
         
         # Compound indexes for common query patterns
@@ -79,13 +80,16 @@ async def create_movie_indexes(collection: Collection):
         ], name="movie_status_date"),
         
         # Array indexes for filtering
-        IndexModel([("genres.name", ASCENDING)], name="movie_genres"),
+        IndexModel([("genres", ASCENDING)], name="movie_genres"),
         IndexModel([("spoken_languages.name", ASCENDING)], name="movie_languages"),
         IndexModel([("origin_country", ASCENDING)], name="movie_countries"),
         
         # Cast and crew indexes
         IndexModel([("cast.name", ASCENDING)], name="movie_cast"),
-        IndexModel([("crew.name", ASCENDING)], name="movie_crew")
+        IndexModel([("crew.name", ASCENDING)], name="movie_crew"),
+        
+        # Watch provider indexes
+        IndexModel([("watch_providers.flatrate.provider_name", ASCENDING)], name="movie_providers")
     ]
 
     try:
@@ -126,12 +130,13 @@ async def create_tv_indexes(collection: Collection):
     tv_indexes = [
         # Unique indexes for identifiers
         IndexModel([("tmdb_id", ASCENDING)], unique=True),
-        IndexModel([("imdb_id", ASCENDING)], unique=True, sparse=True),
+        IndexModel([("external_ids.imdb_id", ASCENDING)], unique=True, sparse=True),
         
         # Text indexes for searchable fields
         IndexModel([
             ("name", TEXT),
-            ("original_name", TEXT)
+            ("original_name", TEXT),
+            ("tagline", TEXT)
         ], name="tv_text_search"),
         
         # Compound indexes for common query patterns
@@ -141,7 +146,7 @@ async def create_tv_indexes(collection: Collection):
         ], name="tv_status_date"),
         
         # Array indexes for filtering
-        IndexModel([("genres.name", ASCENDING)], name="tv_genres"),
+        IndexModel([("genres", ASCENDING)], name="tv_genres"),
         IndexModel([("spoken_languages.name", ASCENDING)], name="tv_languages"),
         IndexModel([("origin_country", ASCENDING)], name="tv_countries"),
         
@@ -154,7 +159,10 @@ async def create_tv_indexes(collection: Collection):
         IndexModel([
             ("seasons.episodes.episode_number", ASCENDING),
             ("seasons.season_number", ASCENDING)
-        ], name="tv_episodes")
+        ], name="tv_episodes"),
+        
+        # Watch provider indexes
+        IndexModel([("watch_providers.flatrate.provider_name", ASCENDING)], name="tv_providers")
     ]
 
     try:

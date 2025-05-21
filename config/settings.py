@@ -2,8 +2,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # External API keys
+    # Embedding settings
+    EMBEDDING_PROVIDER:     str = "openai"
+
+    # OpenAI Settings
     OPENAI_API_KEY:         str
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+
+    # OpenSubtitles settings
     OPENSUBTITLES_API_KEY:  str
 
     # MongoDB configuration
