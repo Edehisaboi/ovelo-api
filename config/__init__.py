@@ -1,4 +1,5 @@
 from .settings import Settings
+from .logging import get_logger
 from .dependencies import get_http_client, get_openai_client
 from dotenv import load_dotenv
 
@@ -7,4 +8,4 @@ load_dotenv()
 # Create a singleton instance
 Settings()
 
-__all__ = ['Settings', 'get_http_client', 'get_openai_client']
+__all__ = ['Settings', 'get_http_client', 'get_openai_client', 'get_logger']

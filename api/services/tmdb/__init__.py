@@ -10,4 +10,4 @@ tmdb_client = TMDbClient(
     base_url=Settings.TMDB_BASE_URL
 )
 
-__all__ = ["tmdb_client", "search_media", "TranscriptChunk"]
+__all__ = ["tmdb_client", "TMDbClient", "search_media", "TranscriptChunk"]

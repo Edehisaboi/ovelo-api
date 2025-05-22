@@ -28,6 +28,7 @@ class MediaDocument:
         """
         return {
             "tmdb_id":            movie.id,
+            "adult":              movie.adult,
             "title":              movie.title,
             "original_title":     movie.original_title,
             "overview":           movie.overview,
@@ -152,6 +153,7 @@ class MediaDocument:
         """
         return {
             "tmdb_id":            tv_show.id,
+            "adult":              tv_show.adult,
             "name":               tv_show.name,
             "original_name":      tv_show.original_name,
             "overview":           tv_show.overview,

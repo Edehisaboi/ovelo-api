@@ -22,7 +22,6 @@ class SearchResults(BaseModel):
     total_pages:    int
     total_results:  int
 
-
 class TranscriptChunk(BaseModel):
     index:      int
     text:       str
@@ -141,6 +140,7 @@ class MovieDetails(BaseModel):
 
 class TVDetails(BaseModel):
     id:                 int
+    adult:              bool
     name:               str
     original_name:      str
     homepage:           Optional[str] = None

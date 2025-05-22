@@ -1,5 +1,5 @@
 from typing import List
-from tmdb import TranscriptChunk
+from api.services.tmdb import TranscriptChunk
 from config import Settings, get_openai_client
 from .client import EmbeddingClient
 
@@ -63,5 +63,6 @@ embedding_service = EmbeddingService()
 
 
 __all__ = [
-    "embedding_service"
+    "embedding_service",
+    "EmbeddingService"
 ]

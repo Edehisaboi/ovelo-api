@@ -4,7 +4,7 @@ from pymongo.operations import SearchIndexModel, IndexModel
 from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 from pymongo import ASCENDING, TEXT
-from config.logging import get_logger
+from config import get_logger
 
 # Get logger for this module
 logger = get_logger(__name__)

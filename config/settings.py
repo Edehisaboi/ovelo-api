@@ -35,19 +35,23 @@ class Settings(BaseSettings):
     TV_SIMILARITY:          str = "cosine"
 
     # Search settings
-    MOVIE_SEARCH_LIMIT:     int = 20
-    TV_SEARCH_LIMIT:        int = 20
+    MOVIE_SEARCH_LIMIT:     int = 3
+    TV_SEARCH_LIMIT:        int = 2
     NUM_CANDIDATES:         int = 100
+    SEARCH_CACHE_TTL:       int = 3600  # 1 hour in seconds
+    SEARCH_CACHE_MAX_SIZE:  int = 100
 
     # TMDb API settings
-    TMDB_API_KEY:           str = "your_api_key_here"
+    TMDB_API_KEY:           str
     TMDB_BASE_URL:          str = "https://api.themoviedb.org/3"
     TMDB_IMAGE_BASE_URL:    str = "https://image.tmdb.org/t/p"
     TMDB_LANGUAGE:          str = "en-US"
     TMDB_REGION:            str = "US"
+    TMDB_RATE_LIMIT:        int = 40  # requests
+    TMDB_RATE_WINDOW:       int = 10  # seconds
 
     # Database query settings
-    MAX_RESULTS_PER_PAGE:   int = 20
+    MAX_RESULTS_PER_PAGE:   int = 10
     DEFAULT_SORT_FIELD:     str = "release_date"
     DEFAULT_SORT_ORDER:     int = -1  # -1 for descending, 1 for ascending
 
@@ -56,6 +60,7 @@ class Settings(BaseSettings):
     DEBUG_MODE:             bool = False
     ENABLE_CACHING:         bool = True
     ENABLE_LOGGING:         bool = True
+    ENABLE_RATE_LIMITING:   bool = True
 
     # Cache settings
     CACHE_TTL:              int = 3600  # 1 hour in seconds

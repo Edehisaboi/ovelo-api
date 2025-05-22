@@ -4,7 +4,7 @@ from datetime import datetime
 from pymongo.collection import Collection
 
 
-def build_base_filter(
+def _build_base_filter(
     genre:      Optional[str] = None,
     language:   Optional[str] = None,
     country:    Optional[str] = None,
@@ -29,13 +29,14 @@ def build_base_filter(
     return base_filter
 
 
-def get_projection_fields(asset_type: str) -> Dict:
+def _get_projection_fields(asset_type: str) -> Dict:
     """
     Get the projection fields for movies or TV shows.
     """
     if asset_type == "movie":
         return {
             "tmdb_id": 1,
+            "adult": 1,
             "title": 1,
             "original_title": 1,
             "overview": 1,
@@ -63,6 +64,7 @@ def get_projection_fields(asset_type: str) -> Dict:
     elif asset_type == "tv":
         return {
             "tmdb_id": 1,
+            "adult": 1,
             "name": 1,
             "original_name": 1,
             "overview": 1,
@@ -120,7 +122,7 @@ def _build_vector_search_pipeline(
     """
     Build a MongoDB aggregation pipeline for vector similarity search with filters.
     """
-    base_filter = build_base_filter(genre, language, country, year, date_field)
+    base_filter = _build_base_filter(genre, language, country, year, date_field)
     search_stage = {
         "$vectorSearch": {
             "index":         index_name or Settings.MOVIE_INDEX_NAME,
@@ -183,7 +185,7 @@ def search_movie_vectors(
         country=country,
         year=year,
         limit=limit or Settings.MOVIE_SEARCH_LIMIT,
-        project_fields=get_projection_fields("movie"),
+        project_fields=_get_projection_fields("movie"),
         index_name=Settings.MOVIE_INDEX_NAME,
         date_field="release_date"
     )
@@ -212,7 +214,7 @@ def search_tv_vectors(
         country=country,
         year=year,
         limit=limit or Settings.TV_SEARCH_LIMIT,
-        project_fields=get_projection_fields("tv"),
+        project_fields=_get_projection_fields("tv"),
         index_name=Settings.TV_INDEX_NAME,
         date_field="first_air_date"
     )
@@ -292,7 +294,7 @@ def search_movie_by_title(
         country=country,
         year=year,
         limit=limit or Settings.MOVIE_SEARCH_LIMIT,
-        project_fields=get_projection_fields("movie"),
+        project_fields=_get_projection_fields("movie"),
         asset_type="movie",
         date_field="release_date"
     )
@@ -318,7 +320,7 @@ def search_tv_by_title(
         country=country,
         year=year,
         limit=limit or Settings.TV_SEARCH_LIMIT,
-        project_fields=get_projection_fields("tv"),
+        project_fields=_get_projection_fields("tv"),
         asset_type="tv",
         date_field="first_air_date"
     )
