@@ -261,7 +261,7 @@ class SearchCache:
         """Clear all entries from the cache."""
         self._cache.clear()
 
-
+# TODO: FIX THIS LOGIC, INCLUDE THE USE OF OPEN SUBTITLES
 class IngestionProcessor:
     def __init__(
         self,
@@ -393,4 +393,5 @@ class IngestionProcessor:
         # Log any exceptions that occurred during processing
         for result in results:
             if isinstance(result, Exception):
-                logger.error(f"Error during ingestion: {str(result)}") 
+                logger.error(f"Error during ingestion: {str(result)}")
+                

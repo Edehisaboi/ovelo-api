@@ -11,6 +11,7 @@ class Settings(BaseSettings):
 
     # OpenSubtitles settings
     OPENSUBTITLES_API_KEY:  str
+    OPENSUBTITLES_BASE_URL: str = "https://api.opensubtitles.com/api/v1"
 
     # MongoDB configuration
     MONGODB_URL:            str = "mongodb://localhost:27017"

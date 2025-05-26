@@ -16,7 +16,7 @@ class TMDbClient:
         base_url:       str
     ) -> None:
         self.http_client = http_client
-        self.api_key = api_key
+        self.api_key =  api_key
         self.base_url = base_url.rstrip('/')
         
         # Initialize API sections
