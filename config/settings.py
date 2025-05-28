@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional, Literal
 
 
 class Settings(BaseSettings):
@@ -8,6 +9,14 @@ class Settings(BaseSettings):
     # OpenAI Settings
     OPENAI_API_KEY:         str
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+
+    # Chunking settings
+    CHUNK_BREAKPOINT_TYPE:      Literal["percentile", "standard_deviation", "interquartile", "gradient"] = "percentile"
+    CHUNK_BREAKPOINT_AMOUNT:    float = 90.0
+    CHUNK_BUFFER_SIZE:          int = 1
+    CHUNK_ADD_START_INDEX:      bool = False
+    CHUNK_MIN_SIZE:             Optional[int] = None
+    CHUNK_NUMBER:               Optional[int] = None
 
     # OpenSubtitles settings
     OPENSUBTITLES_API_KEY:  str

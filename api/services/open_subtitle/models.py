@@ -13,14 +13,9 @@ class SubtitleFileInfo(BaseModel):
     language:           str
     download_count:     int
     new_download_count: int
-    hearing_impaired:   bool
     hd:                 bool
     fps:                Optional[float] = None
-    votes:              int
-    ratings:            Optional[float] = None
     from_trusted:       bool
-    ai_translated:      bool
-    machine_translated: bool
     url:                str
     files:              List[SubtitleFile]
 
