@@ -1,6 +1,6 @@
 from typing import Optional
 from .client import TMDbClient
-from .models import SearchResults
+from .model import SearchResults
 
 async def search_media(
     client:         TMDbClient,

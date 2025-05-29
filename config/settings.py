@@ -13,10 +13,7 @@ class Settings(BaseSettings):
     # Chunking settings
     CHUNK_BREAKPOINT_TYPE:      Literal["percentile", "standard_deviation", "interquartile", "gradient"] = "percentile"
     CHUNK_BREAKPOINT_AMOUNT:    float = 90.0
-    CHUNK_BUFFER_SIZE:          int = 1
-    CHUNK_ADD_START_INDEX:      bool = False
-    CHUNK_MIN_SIZE:             Optional[int] = None
-    CHUNK_NUMBER:               Optional[int] = None
+    CHUNK_SIZE:               Optional[int] = 8000
 
     # OpenSubtitles settings
     OPENSUBTITLES_API_KEY:  str

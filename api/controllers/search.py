@@ -1,12 +1,15 @@
 import time
 import asyncio
 from typing import Optional, Any, Dict, List, Tuple
+from functools import lru_cache
+
+from api.services.embedding import EmbeddingService
 from config import get_logger, Settings
-from api.services.database import tv_collection, movies_collection
+from api.services.database import tv_collection, movies_collection, media_document
 from api.services.tmdb import TMDbClient
-from motor.motor_asyncio import AsyncIOMotorClient
 from api.services.database.db_query import search_movie_by_title, search_tv_by_title
-from api.services.tmdb.models import SearchResults
+from api.services.tmdb.model import SearchResults, SearchResult
+from api.services.open_subtitle import opensubtitles_client, subtitle_chunker
 
 logger = get_logger(__name__)
 
@@ -21,6 +24,19 @@ class SearchController:
         self.tv_collection =        tv_collection
         self.cache =                SearchCache()
 
+    @lru_cache(maxsize=1000)
+    def _generate_cache_key(
+            self,
+            query: str,
+            limit: int,
+            language: Optional[str],
+            country: Optional[str],
+            year: Optional[int],
+            adult: bool
+    ) -> str:
+        """Generate a consistent cache key for search parameters."""
+        return f"{query.lower()}:{limit}:{language}:{country}:{year}:{adult}"
+
     async def _search_database(
             self,
             query:          str,
@@ -30,28 +46,28 @@ class SearchController:
             year:           Optional[int] = None,
             adult:          bool = True
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Search both movies and TV shows in the database."""
+        """Search both movies and TV shows in the database in parallel."""
         try:
-            # Search movies
-            movies = await search_movie_by_title(
-                self.movies_collection,
-                query,
-                exact_match=False,
-                language=language,
-                country=country,
-                year=year,
-                limit=limit//2
-            )
-
-            # Search TV shows
-            tv_shows = await search_tv_by_title(
-                self.tv_collection,
-                query,
-                exact_match=False,
-                language=language,
-                country=country,
-                year=year,
-                limit=limit//2
+            # Search movies and TV shows concurrently
+            movies, tv_shows = await asyncio.gather(
+                search_movie_by_title(
+                    self.movies_collection,
+                    query,
+                    exact_match=False,
+                    language=language,
+                    country=country,
+                    year=year,
+                    limit=limit//2
+                ),
+                search_tv_by_title(
+                    self.tv_collection,
+                    query,
+                    exact_match=False,
+                    language=language,
+                    country=country,
+                    year=year,
+                    limit=limit//2
+                )
             )
 
             return movies, tv_shows
@@ -69,7 +85,7 @@ class SearchController:
             year:           Optional[int] = None,
             adult:          bool = True
     ) -> Tuple[SearchResults, SearchResults]:
-        """Search both movies and TV shows using TMDb API."""
+        """Search both movies and TV shows using TMDb API in parallel."""
         try:
             # Search both movies and TV shows in parallel
             movie_results, tv_results = await asyncio.gather(
@@ -88,14 +104,38 @@ class SearchController:
             )
 
             # Extract results
-            movies = movie_results.results[:limit//2]
-            tv_shows = tv_results.results[:limit//2]
+            movies = movie_results.results[:limit//2] if movie_results and movie_results.results else []
+            tv_shows = tv_results.results[:limit//2] if tv_results and tv_results.results else []
 
             return movies, tv_shows
 
         except Exception as e:
             logger.error(f"Error searching TMDb: {str(e)}")
             return [], []
+
+    def _deduplicate_results(
+            self,
+            local_movies: List[Dict[str, Any]],
+            local_tv: List[Dict[str, Any]],
+            tmdb_movies: List[SearchResult],
+            tmdb_tv: List[SearchResult]
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Deduplicate and merge results from local DB and TMDb."""
+        # Create sets of existing IDs
+        existing_movie_ids = {movie["tmdb_id"] for movie in local_movies}
+        existing_tv_ids = {tv["tmdb_id"] for tv in local_tv}
+        
+        # Add only new movies and TV shows
+        new_movies = [
+            movie for movie in tmdb_movies 
+            if movie.id not in existing_movie_ids
+        ]
+        new_tv = [
+            tv for tv in tmdb_tv 
+            if tv.id not in existing_tv_ids
+        ]
+        
+        return local_movies + new_movies, local_tv + new_tv
 
     async def search(
             self,
@@ -120,52 +160,30 @@ class SearchController:
         Returns:
             Dict[str, List[Dict[str, Any]]]: Dictionary containing 'movies' and 'tv_shows' lists
         """
-        # Create cache key including all search parameters
-        cache_key = f"{query}:{limit}:{language}:{country}:{year}:{adult}"
+        # Generate cache key
+        cache_key = self._generate_cache_key(query, limit, language, country, year, adult)
         cached_results = self.cache.get(cache_key)
         if cached_results:
             return cached_results
 
-        # Try database search first
-        movies, tv_shows = await self._search_database(
-            query,
-            limit,
-            language,
-            country,
-            year,
-            adult
+        # First search local database
+        local_movies, local_tv = await self._search_database(
+            query, limit, language, country, year, adult
         )
 
-        # If we don't have enough results, search TMDb
-        if len(movies) < limit//2 or len(tv_shows) < limit//2:
-            tmdb_movies, tmdb_tv_shows = await self._search_tmdb(
-                query,
-                limit,
-                language,
-                country,
-                year,
-                adult
+        # Only search TMDb if we don't have enough results
+        if len(local_movies) < limit//2 or len(local_tv) < limit//2:
+            tmdb_movies, tmdb_tv = await self._search_tmdb(
+                query, limit, language, country, year, adult
             )
             
-            # Combine results, ensuring no duplicates
-            existing_movie_ids = {
-                movie["tmdb_id"]
-                for movie in movies
-            }
-            existing_tv_ids = {
-                tv["tmdb_id"]
-                for tv in tv_shows
-            }
-            
-            # Add only new movies and TV shows
-            movies.extend([
-                movie for movie in tmdb_movies 
-                if movie.id not in existing_movie_ids
-            ])
-            tv_shows.extend([
-                tv for tv in tmdb_tv_shows 
-                if tv.id not in existing_tv_ids
-            ])
+            # Deduplicate and merge results
+            movies, tv_shows = self._deduplicate_results(
+                local_movies, local_tv,
+                tmdb_movies, tmdb_tv
+            )
+        else:
+            movies, tv_shows = local_movies, local_tv
 
         # Prepare final results
         results = {
@@ -215,15 +233,7 @@ class SearchCache:
             self,
             key:            str
     ) -> Optional[Any]:
-        """
-        Get a value from the cache if it exists and is not expired.
-        
-        Args:
-            key (str): The cache key to retrieve
-            
-        Returns:
-            Optional[Any]: The cached value if it exists and is not expired, None otherwise
-        """
+        """Get a value from the cache if it exists and is not expired."""
         if not self.enabled:
             return None
             
@@ -242,13 +252,7 @@ class SearchCache:
             key:            str,
             value:          Any
     ) -> None:
-        """
-        Set a value in the cache with current timestamp.
-        
-        Args:
-            key (str): The cache key to set
-            value (Any): The value to cache
-        """
+        """Set a value in the cache with current timestamp."""
         if not self.enabled:
             return
             
@@ -261,111 +265,80 @@ class SearchCache:
         """Clear all entries from the cache."""
         self._cache.clear()
 
-# TODO: FIX THIS LOGIC, INCLUDE THE USE OF OPEN SUBTITLES
 class IngestionProcessor:
     def __init__(
         self,
         settings: Settings,
-        db: AsyncIOMotorClient,
         embedding_service: EmbeddingService,
         tmdb_client: TMDbClient
     ):
         self.settings = settings
-        self.db = db
         self.embedding_service = embedding_service
         self.tmdb_client = tmdb_client
-        self.movies_collection = self.db[settings.MONGODB_DB][settings.MOVIES_COLLECTION]
-        self.tv_collection = self.db[settings.MONGODB_DB][settings.TV_COLLECTION]
+        self.movies_collection = movies_collection
+        self.tv_collection = tv_collection
 
     async def process_movie(self, movie_data: SearchResult) -> Optional[Dict[str, Any]]:
         """Process a single movie for ingestion."""
         try:
             # Get full movie details from TMDb
-            movie_details = await self.tmdb_client.movies.get_details(movie_data.id)
+            movie_details = await self.tmdb_client.movies.details(movie_data.id)
             if not movie_details:
                 logger.warning(f"No details found for movie {movie_data.id}")
                 return None
 
-            # Create embedding for the movie
-            overview = movie_details.overview
-            if not overview:
-                logger.warning(f"No overview found for movie {movie_data.id}")
-                return None
+            # Search for the movie subtitle
+            subtitles = await opensubtitles_client.search.by_tmdb(
+                tmdb_id=movie_details.id,
+                language=Settings.OPEN_SUBTITLES_LANGUAGE,
+                order_by=Settings.OPEN_SUBTITLES_ORDER_BY,
+                order_direction=Settings.OPEN_SUBTITLES_ORDER_DIRECTION,
+                trusted_sources=Settings.OPEN_SUBTITLES_TRUSTED_SOURCES,
+            )
 
-            embedding = await self.embedding_service.get_embedding(overview)
-            if not embedding:
-                logger.error(f"Failed to create embedding for movie {movie_data.id}")
-                return None
+            # Download the movie subtitle
+            subtitle_file = await opensubtitles_client.subtitles.download(
+                subtitle_file=subtitles[0].attributes.files[0]
+            )
+
+            # Parse and chunk the movie subtitle
+            subtitle_chunks = subtitle_chunker.chunk_subtitle(
+                srt_content=subtitle_file.subtitle_text
+            )
+
+            # Create embedding for the movie
+            embeddings = await self.embedding_service.update_with_embeddings(
+                transcript_chunks=subtitle_chunks
+            )
+
+            # update the movie details with the embedding
+            movie_details.model_copy(
+                update={
+                    "transcript_chunks": embeddings,
+                    "embedding_model": Settings.EMBEDDING_MODEL
+                }
+            )
 
             # Prepare document for database
-            document = {
-                "tmdb_id": movie_details.id,
-                "title": movie_details.title,
-                "overview": overview,
-                "poster_path": movie_details.poster_path,
-                "release_date": movie_details.release_date,
-                "vote_average": movie_details.vote_average,
-                "embedding": embedding
-            }
+            movie_document = media_document.movie_document(
+                movie=movie_details,
+            )
 
             # Upsert to database
             await self.movies_collection.update_one(
-                {"tmdb_id": document["tmdb_id"]},
-                {"$set": document},
+                {"$set": movie_document},
                 upsert=True
             )
 
             logger.info(f"Successfully processed movie {movie_data.id}")
-            return document
+            return movie_document
 
         except Exception as e:
             logger.error(f"Error processing movie {movie_data.id}: {str(e)}")
             return None
 
     async def process_tv_show(self, tv_data: SearchResult) -> Optional[Dict[str, Any]]:
-        """Process a single TV show for ingestion."""
-        try:
-            # Get full TV show details from TMDb
-            tv_details = await self.tmdb_client.tv.get_details(tv_data.id)
-            if not tv_details:
-                logger.warning(f"No details found for TV show {tv_data.id}")
-                return None
-
-            # Create embedding for the TV show
-            overview = tv_details.overview
-            if not overview:
-                logger.warning(f"No overview found for TV show {tv_data.id}")
-                return None
-
-            embedding = await self.embedding_service.get_embedding(overview)
-            if not embedding:
-                logger.error(f"Failed to create embedding for TV show {tv_data.id}")
-                return None
-
-            # Prepare document for database
-            document = {
-                "tmdb_id": tv_details.id,
-                "name": tv_details.name,
-                "overview": overview,
-                "poster_path": tv_details.poster_path,
-                "first_air_date": tv_details.first_air_date,
-                "vote_average": tv_details.vote_average,
-                "embedding": embedding
-            }
-
-            # Upsert to database
-            await self.tv_collection.update_one(
-                {"tmdb_id": document["tmdb_id"]},
-                {"$set": document},
-                upsert=True
-            )
-
-            logger.info(f"Successfully processed TV show {tv_data.id}")
-            return document
-
-        except Exception as e:
-            logger.error(f"Error processing TV show {tv_data.id}: {str(e)}")
-            return None
+        pass
 
     async def process_results(
         self,

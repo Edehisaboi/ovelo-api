@@ -6,7 +6,6 @@ from .client import EmbeddingClient
 
 class EmbeddingService:
     """Service for handling text embeddings and transcript processing."""
-    
     def __init__(
             self,
             client: EmbeddingClient = None
@@ -30,31 +29,17 @@ class EmbeddingService:
         """Generate embeddings for multiple texts."""
         return await self.client.create_embeddings(texts)
 
-    async def process_text(
+    async def update_with_embeddings(
             self,
-            text: str
-        ) -> TranscriptChunk:
-        """Process a single text and return a TranscriptChunk."""
-        embedding = await self.get_embedding(text)
-        return TranscriptChunk(
-            index=0,
-            text=text,
-            embedding=embedding
-        )
-
-    async def process_texts(
-            self,
-            texts: List[str]
+            transcript_chunks: List[TranscriptChunk]
         ) -> List[TranscriptChunk]:
-        """Process multiple texts and return a list of TranscriptChunks."""
-        embeddings = await self.get_embeddings(texts)
+        """Generate embeddings for each transcript chunk and update them with the corresponding embedding."""
         return [
-            TranscriptChunk(
-                index=i,
-                text=text,
-                embedding=embedding
+            transcript_chunk.model_copy(update={"embedding": embedding})
+            for transcript_chunk, embedding in zip(
+                transcript_chunks,
+                await self.get_embeddings([tc.text for tc in transcript_chunks])
             )
-            for i, (text, embedding) in enumerate(zip(texts, embeddings))
         ]
 
 
@@ -63,6 +48,8 @@ embedding_service = EmbeddingService()
 
 
 __all__ = [
+    # Instances
     "embedding_service",
+    # Classes Models
     "EmbeddingService"
 ]

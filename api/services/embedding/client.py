@@ -5,7 +5,6 @@ from config import Settings
 
 class EmbeddingClient:
     """OpenAI embedding client implementation."""
-    
     def __init__(
             self,
             client: OpenAI,
