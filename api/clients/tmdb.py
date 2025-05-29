@@ -2,7 +2,7 @@ import httpx
 import asyncio
 from typing import Dict, Any, Optional, List
 from .base import AbstractAPIClient
-from api.services.rate_limiting.limiter import RateLimiter
+from api.services.rateLimiting.limiter import RateLimiter
 from api.services.tmdb.model import (
     MovieDetails, MovieCredits, MovieImages, MovieVideos,
     TVDetails, WatchProviders, SearchResults, Season

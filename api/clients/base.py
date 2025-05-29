@@ -1,7 +1,7 @@
 import httpx
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, Any
-from api.services.rate_limiting.limiter import RateLimiter
+from api.services.rateLimiting.limiter import RateLimiter
 
 
 class BaseAPIClient(ABC):

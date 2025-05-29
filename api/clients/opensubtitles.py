@@ -1,8 +1,8 @@
 import httpx
 from typing import Dict, Any, Optional, List
 from .base import AbstractAPIClient
-from api.services.rate_limiting.limiter import RateLimiter
-from api.services.open_subtitle.model import SubtitleSearchResults, SubtitleFile
+from api.services.rateLimiting.limiter import RateLimiter
+from api.services.subtitle.model import SubtitleSearchResults, SubtitleFile
 
 class OpenSubtitlesClient(AbstractAPIClient):
     """OpenSubtitles API client implementation."""

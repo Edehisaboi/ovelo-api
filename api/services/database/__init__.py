@@ -1,10 +1,12 @@
 from api.services.database.connection import db_connect, setup_indexes
-from api.services.database.document import MediaDocument
+from ..document.movie import MovieDocumentBuilder
+from ..document.tv import TVDocumentBuilder
 
 
 # Create singleton instances
 client, db, movies_collection, tv_collection = db_connect()
-media_document = MediaDocument()
+movie_document = MovieDocumentBuilder()
+tv_document = TVDocumentBuilder()
 
 async def index_database():
     """Initialize the database connection and setup indexes for both collections."""
@@ -16,5 +18,5 @@ __all__ = [
     # Functions
     'index_database',
     # Classes
-    'media_document'
+    'movie_document', 'tv_document'
 ]

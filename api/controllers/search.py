@@ -9,7 +9,7 @@ from api.services.database import tv_collection, movies_collection, media_docume
 from api.services.tmdb import TMDbClient
 from api.services.database.db_query import search_movie_by_title, search_tv_by_title
 from api.services.tmdb.model import SearchResults, SearchResult
-from api.services.open_subtitle import opensubtitles_client, subtitle_chunker
+from api.services.subtitle import opensubtitles_client, subtitle_chunker
 
 logger = get_logger(__name__)
 

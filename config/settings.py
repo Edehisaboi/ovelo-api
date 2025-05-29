@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 
 
 class Settings(BaseSettings):
@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     # OpenAI Settings
     OPENAI_API_KEY:         str
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    OPENAI_EMBEDDING_MAX_TOKENS: int = 8192
+    OPENAI_EMBEDDING_MAX_RETRIES: int = 3
+    OPENAI_EMBEDDING_BATCH_SIZE: int = 100
+    OPENAI_EMBEDDING_WAIT_MIN: int = 4
+    OPENAI_EMBEDDING_WAIT_MAX: int = 10
+    OPENAI_EMBEDDING_WAIT_MULTIPLIER: int = 1
 
     # Chunking settings
     CHUNK_BREAKPOINT_TYPE:      Literal["percentile", "standard_deviation", "interquartile", "gradient"] = "percentile"
@@ -18,6 +24,12 @@ class Settings(BaseSettings):
     # OpenSubtitles settings
     OPENSUBTITLES_API_KEY:  str
     OPENSUBTITLES_BASE_URL: str = "https://api.opensubtitles.com/api/v1"
+    OPENSUBTITLES_RATE_LIMIT: int = 40
+    OPENSUBTITLES_RATE_WINDOW: int = 10
+    OPENSUBTITLES_LANGUAGE: str = "en"
+    OPENSUBTITLES_ORDER_BY: List[str] = ["download_count"]
+    OPENSUBTITLES_ORDER_DIRECTION: str = "desc"
+    OPENSUBTITLES_TRUSTED_SOURCES: bool = True
 
     # MongoDB configuration
     MONGODB_URL:            str = "mongodb://localhost:27017"
@@ -54,8 +66,8 @@ class Settings(BaseSettings):
     TMDB_IMAGE_BASE_URL:    str = "https://image.tmdb.org/t/p"
     TMDB_LANGUAGE:          str = "en-US"
     TMDB_REGION:            str = "US"
-    TMDB_RATE_LIMIT:        int = 40  # requests
-    TMDB_RATE_WINDOW:       int = 10  # seconds
+    TMDB_RATE_LIMIT:        int = 40
+    TMDB_RATE_WINDOW:       int = 10
 
     # Database query settings
     MAX_RESULTS_PER_PAGE:   int = 10

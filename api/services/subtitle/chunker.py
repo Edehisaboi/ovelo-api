@@ -3,7 +3,7 @@ from langchain_experimental.text_splitter import SemanticChunker
 from langchain_openai import OpenAIEmbeddings
 from api.services.tmdb import TranscriptChunk
 from config import Settings, get_logger
-from ..open_subtitle.srt_parser import SRTParser
+from .parser import SRTParser
 from .validator import SubtitleValidator
 
 logger = get_logger(__name__)
