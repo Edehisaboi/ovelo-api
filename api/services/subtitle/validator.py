@@ -1,8 +1,10 @@
-from typing import List
-from config import get_logger
 import re
+from typing import List
+
+from config import get_logger
 
 logger = get_logger(__name__)
+
 
 class SubtitleValidator:
     """Validator for subtitle content."""

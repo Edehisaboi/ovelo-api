@@ -1,7 +1,9 @@
-from config import Settings
-from typing import List, Dict, Optional
 from datetime import datetime
+from typing import Dict, List, Optional
+
 from pymongo.collection import Collection
+
+from config import Settings
 
 
 def _build_base_filter(

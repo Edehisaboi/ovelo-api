@@ -1,9 +1,11 @@
 import logging
+from typing import List
+
 import tiktoken
 from openai import OpenAI
-from config import Settings
-from typing import List
 from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
+
+from config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -102,3 +104,4 @@ class EmbeddingClient:
         """Get the dimensionality of the embeddings for the current model."""
         test_embedding = await self.create_embedding("test")
         return len(test_embedding)
+    

@@ -1,12 +1,21 @@
-import httpx
 import asyncio
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
+import httpx
+
 from .base import AbstractAPIClient
 from api.services.rateLimiting.limiter import RateLimiter
 from api.services.tmdb.model import (
-    MovieDetails, MovieCredits, MovieImages, MovieVideos,
-    TVDetails, WatchProviders, SearchResults, Season
+    MovieCredits,
+    MovieDetails,
+    MovieImages,
+    MovieVideos,
+    SearchResults,
+    Season,
+    TVDetails,
+    WatchProviders,
 )
+
 
 class TMDbClient(AbstractAPIClient):
     """TMDb API client implementation."""

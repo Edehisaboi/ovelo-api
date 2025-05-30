@@ -1,17 +1,21 @@
 import logging
-from pymongo.collection import Collection
-from typing import Dict, List, Union, Optional
-from bson import ObjectId
 from functools import lru_cache
-from config import Settings
+from typing import Dict, List, Optional, Union
+
+from bson import ObjectId
+from pymongo.collection import Collection
+
+from config import settings
+
 
 # Configure logging
 logging.basicConfig(
-    level=Settings.LOG_LEVEL,
-    format=Settings.LOG_FORMAT,
-    filename=Settings.LOG_FILE
+    level=settings.LOG_LEVEL,
+    format=settings.LOG_FORMAT,
+    filename=settings.LOG_FILE
 )
 logger = logging.getLogger(__name__)
+
 
 # Cache decorator with settings
 def cache_result(ttl: Optional[int] = None, max_size: Optional[int] = None):
@@ -19,10 +23,10 @@ def cache_result(ttl: Optional[int] = None, max_size: Optional[int] = None):
     Cache decorator that uses settings for TTL and max size.
     """
     def decorator(func):
-        return lru_cache(maxsize=max_size or Settings.CACHE_MAX_SIZE)(func)
+        return lru_cache(maxsize=max_size or settings.CACHE_MAX_SIZE)(func)
     return decorator
 
-@cache_result(ttl=Settings.CACHE_TTL)
+@cache_result(ttl=settings.CACHE_TTL)
 def insert_document(collection: Collection, document: Dict) -> str:
     """
     Inserts a single document into the collection.
@@ -36,7 +40,7 @@ def insert_document(collection: Collection, document: Dict) -> str:
         logger.error(f"Failed to insert document: {str(e)}")
         raise
 
-@cache_result(ttl=Settings.CACHE_TTL)
+@cache_result(ttl=settings.CACHE_TTL)
 def insert_documents(collection: Collection, documents: List[Dict]) -> List[str]:
     """
     Inserts multiple documents into the collection.
@@ -50,7 +54,7 @@ def insert_documents(collection: Collection, documents: List[Dict]) -> List[str]
         logger.error(f"Failed to insert documents: {str(e)}")
         raise
 
-@cache_result(ttl=Settings.CACHE_TTL)
+@cache_result(ttl=settings.CACHE_TTL)
 def delete_by_id(collection: Collection, document_id: Union[str, ObjectId]) -> int:
     """
     Deletes a single document by its _id.
@@ -66,7 +70,7 @@ def delete_by_id(collection: Collection, document_id: Union[str, ObjectId]) -> i
         logger.error(f"Failed to delete document: {str(e)}")
         raise
 
-@cache_result(ttl=Settings.CACHE_TTL)
+@cache_result(ttl=settings.CACHE_TTL)
 def delete_many_by_filter(collection: Collection, filter_query: Dict) -> int:
     """
     Deletes all documents that match the filter query.

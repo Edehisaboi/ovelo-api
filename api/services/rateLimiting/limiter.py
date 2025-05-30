@@ -1,14 +1,15 @@
 import time
 import asyncio
+
 from dataclasses import dataclass
 from config import Settings
 
 @dataclass
 class RateLimitConfig:
     """Configuration for rate limiting."""
-    rate_limit: int
-    rate_window: int
-    enabled: bool = True
+    rate_limit:     int
+    rate_window:    int
+    enabled:        bool = True
 
 class RateLimiter:
     """Generic rate limiter implementation."""

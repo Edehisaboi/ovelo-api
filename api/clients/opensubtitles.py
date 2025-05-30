@@ -1,8 +1,11 @@
+from typing import Any, Dict, List, Optional
+
 import httpx
-from typing import Dict, Any, Optional, List
+
 from .base import AbstractAPIClient
 from api.services.rateLimiting.limiter import RateLimiter
-from api.services.subtitle.model import SubtitleSearchResults, SubtitleFile
+from api.services.subtitle.model import SubtitleFile, SubtitleSearchResults
+
 
 class OpenSubtitlesClient(AbstractAPIClient):
     """OpenSubtitles API client implementation."""
@@ -47,14 +50,14 @@ class SearchService:
     
     async def _build_params(
         self,
-        id_key:         str,
-        id_value:       str | int,
-        language:       str,
-        season_number:  Optional[int],
-        episode_number: Optional[int],
-        order_by:       Optional[str],
-        order_direction: Optional[str],
-        trusted_sources: Optional[bool] = None
+        id_key:             str,
+        id_value:           str | int,
+        language:           str,
+        season_number:      Optional[int],
+        episode_number:     Optional[int],
+        order_by:           Optional[str],
+        order_direction:    Optional[str],
+        trusted_sources:    Optional[bool] = None
     ) -> Dict[str, Any]:
         """Build search parameters."""
         params = {
@@ -75,13 +78,13 @@ class SearchService:
     
     async def by_imdb(
         self,
-        imdb_id:        str,
-        language:       str = "en",
-        season_number:  Optional[int] = None,
-        episode_number: Optional[int] = None,
-        order_by:       Optional[List[str]] = None,
-        order_direction: Optional[str] = None,
-        trusted_sources: Optional[bool] = None
+        imdb_id:            str,
+        language:           str = "en",
+        season_number:      Optional[int] = None,
+        episode_number:     Optional[int] = None,
+        order_by:           Optional[List[str]] = None,
+        order_direction:    Optional[str] = None,
+        trusted_sources:    Optional[bool] = None
     ) -> SubtitleSearchResults:
         """Search subtitles by IMDb ID."""
         params = await self._build_params(
@@ -99,13 +102,13 @@ class SearchService:
     
     async def by_tmdb(
         self,
-        tmdb_id:        int,
-        language:       str = "en",
-        season_number:  Optional[int] = None,
-        episode_number: Optional[int] = None,
-        order_by:       Optional[List[str]] = None,
-        order_direction: Optional[str] = None,
-        trusted_sources: Optional[bool] = None
+        tmdb_id:            int,
+        language:           str = "en",
+        season_number:      Optional[int] = None,
+        episode_number:     Optional[int] = None,
+        order_by:           Optional[List[str]] = None,
+        order_direction:    Optional[str] = None,
+        trusted_sources:    Optional[bool] = None
     ) -> SubtitleSearchResults:
         """Search subtitles by TMDb ID."""
         params = await self._build_params(
@@ -123,14 +126,14 @@ class SearchService:
     
     async def by_parent(
         self,
-        parent_type:    str,
-        parent_id:      str | int,
-        language:       str = "en",
-        season_number:  Optional[int] = None,
-        episode_number: Optional[int] = None,
-        order_by:       Optional[List[str]] = None,
-        order_direction: Optional[str] = None,
-        trusted_sources: Optional[bool] = None
+        parent_type:        str,
+        parent_id:          str | int,
+        language:           str = "en",
+        season_number:      Optional[int] = None,
+        episode_number:     Optional[int] = None,
+        order_by:           Optional[List[str]] = None,
+        order_direction:    Optional[str] = None,
+        trusted_sources:    Optional[bool] = None
     ) -> SubtitleSearchResults:
         """Search subtitles by parent ID (for TV shows)."""
         param_key = f"parent_{parent_type.lower()}_id"

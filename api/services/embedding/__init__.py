@@ -1,8 +1,9 @@
-from typing import List
 import logging
+from typing import List
+
+from api.clients import EmbeddingClient
 from api.services.tmdb import TranscriptChunk
-from config import Settings, get_openai_client
-from .client import EmbeddingClient
+from config import get_embedding_client
 
 logger = logging.getLogger(__name__)
 
@@ -11,9 +12,7 @@ class EmbeddingService:
     """Service for handling text embeddings and transcript processing."""
 
     def __init__(self, client: EmbeddingClient = None):
-        self.client = client or EmbeddingClient(
-            client=get_openai_client()
-        )
+        self.client = client or get_embedding_client()
 
     async def get_embedding(self, text: str) -> List[float]:
         """Generate embedding for a single text."""
@@ -56,3 +55,9 @@ __all__ = [
     "embedding_service",
     "EmbeddingService"
 ]
+
+"""
+Embedding service module for handling vector embeddings.
+This module provides high-level functionality for working with embeddings,
+while the actual client implementation is in the clients directory.
+"""

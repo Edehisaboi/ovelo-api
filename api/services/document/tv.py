@@ -1,6 +1,8 @@
 from typing import Dict, Any
+
 from api.services.tmdb.model import TVDetails
 from .base import DocumentBuilder
+
 
 class TVDocumentBuilder(DocumentBuilder[TVDetails]):
     """Builder for TV documents."""

@@ -1,13 +1,14 @@
 import time
-from config import Settings
-from pymongo.operations import SearchIndexModel, IndexModel
+
+from pymongo import ASCENDING, TEXT
 from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
-from pymongo import ASCENDING, TEXT
-from config import get_logger
+from pymongo.operations import IndexModel, SearchIndexModel
 
-# Get logger for this module
+from config import Settings, get_logger, get_movies_collection, get_tv_collection
+
 logger = get_logger(__name__)
+
 
 async def _create_and_wait(collection: Collection, model: SearchIndexModel):
     """
@@ -39,7 +40,7 @@ async def _create_and_wait(collection: Collection, model: SearchIndexModel):
         raise
 
 
-async def create_movie_indexes(collection: Collection):
+async def _create_movie_indexes(collection: Collection):
     """
     Creates all necessary indexes for efficient querying of movies.
     Includes vector search indexes for embeddings and traditional indexes for common queries.
@@ -105,7 +106,7 @@ async def create_movie_indexes(collection: Collection):
         raise
 
 
-async def create_tv_indexes(collection: Collection):
+async def _create_tv_indexes(collection: Collection):
     """
     Creates all necessary indexes for efficient querying of TV shows.
     Includes vector search indexes for embeddings and traditional indexes for common queries.
@@ -176,3 +177,21 @@ async def create_tv_indexes(collection: Collection):
     except PyMongoError as e:
         logger.error(f"Failed to create TV show indexes: {str(e)}")
         raise
+
+
+
+async def setup_indexes():
+    """
+    Set up indexes for both movie and TV show collections.
+    Uses the singleton collection instances from the dependency system.
+    """
+    movies_collection = get_movies_collection()
+    tv_collection = get_tv_collection()
+    
+    logger.info("Setting up movie collection indexes...")
+    await _create_movie_indexes(movies_collection)
+    
+    logger.info("Setting up TV show collection indexes...")
+    await _create_tv_indexes(tv_collection)
+
+__all__ = ['setup_indexes']

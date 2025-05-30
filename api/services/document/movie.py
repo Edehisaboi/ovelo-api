@@ -1,6 +1,8 @@
 from typing import Dict, Any
+
 from api.services.tmdb.model import MovieDetails
 from .base import DocumentBuilder
+
 
 class MovieDocumentBuilder(DocumentBuilder[MovieDetails]):
     """Builder for movie documents."""

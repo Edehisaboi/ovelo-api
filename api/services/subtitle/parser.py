@@ -1,7 +1,9 @@
 import re
 import unicodedata
 from typing import List
+
 from spellchecker import SpellChecker
+
 
 class SRTParser:
     def __init__(self):
