@@ -28,8 +28,7 @@ async def search_movies(
     language:           str = "en-US",
     include_adult:      bool = False,
     region:             Optional[str] = None,
-    year:               Optional[int] = None,
-    primary_release_year: Optional[int] = None
+    year:               Optional[int] = None
 ) -> SearchResults:
     """Search for movies only using TMDB API."""
     return await client.search.movies(
@@ -38,8 +37,7 @@ async def search_movies(
         language=language,
         include_adult=include_adult,
         region=region,
-        year=year,
-        primary_release_year=primary_release_year
+        year=year
     )
 
 async def search_tv_shows(
@@ -47,16 +45,14 @@ async def search_tv_shows(
     query:              str,
     page:               int = 1,
     language:           str = "en-US",
-    include_adult:      bool = False,
-    first_air_date_year: Optional[int] = None
+    include_adult:      bool = False
 ) -> SearchResults:
     """Search for TV shows only using TMDB API."""
     return await client.search.tv_shows(
         query=query,
         page=page,
         language=language,
-        include_adult=include_adult,
-        first_air_date_year=first_air_date_year
+        include_adult=include_adult
     )
 
 __all__ = ['search_media', 'search_movies', 'search_tv_shows']

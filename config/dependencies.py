@@ -65,7 +65,8 @@ def get_tmdb_client() -> TMDbClient:
     return TMDbClient(
         api_key=settings.TMDB_API_KEY,
         http_client=get_http_client(),
-        rate_limiter=get_tmdb_rate_limiter()
+        rate_limiter=get_tmdb_rate_limiter(),
+        base_url= settings.TMDB_BASE_URL
     )
 
 
@@ -74,7 +75,9 @@ def get_opensubtitles_client() -> OpenSubtitlesClient:
     """Get a singleton OpenSubtitles client instance."""
     return OpenSubtitlesClient(
         api_key=settings.OPENSUBTITLES_API_KEY,
-        rate_limiter=get_opensubtitles_rate_limiter()
+        http_client=get_http_client(),
+        rate_limiter=get_opensubtitles_rate_limiter(),
+        base_url=settings.OPENSUBTITLES_BASE_URL
     )
 
 

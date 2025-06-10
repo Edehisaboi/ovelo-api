@@ -48,9 +48,9 @@ class SearchService:
     def __init__(self, client: OpenSubtitlesClient) -> None:
         self._client = client
     
+    @staticmethod
     async def _build_params(
-        self,
-        id_key:             str,
+            id_key:             str,
         id_value:           str | int,
         language:           str,
         season_number:      Optional[int],
@@ -178,7 +178,7 @@ class SubtitlesService:
         download_url: str
     ) -> str:
         """Fetch the subtitle text from the download URL."""
-        response = await self._client._http_client.get(download_url)
+        response = await self._client.http_client.get(download_url)
         response.raise_for_status()
         return response.text
     

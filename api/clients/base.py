@@ -1,10 +1,9 @@
+import httpx
+
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
-import httpx
-
 from api.services.rateLimiting.limiter import RateLimiter
-
 
 
 class BaseAPIClient(ABC):
@@ -28,6 +27,7 @@ class BaseAPIClient(ABC):
         """Make a POST request to the API."""
         pass
 
+
 class AbstractAPIClient(BaseAPIClient):
     """Abstract base class implementing common API client functionality."""
     def __init__(
@@ -37,7 +37,7 @@ class AbstractAPIClient(BaseAPIClient):
         base_url:       str,
         rate_limiter:   'RateLimiter'
     ) -> None:
-        self._http_client = http_client
+        self.http_client = http_client
         self._api_key =     api_key
         self._base_url =    base_url.rstrip('/')
         self._rate_limiter = rate_limiter
@@ -51,7 +51,7 @@ class AbstractAPIClient(BaseAPIClient):
         await self._rate_limiter.acquire()
         params = params or {}
         
-        response = await self._http_client.get(
+        response = await self.http_client.get(
             f"{self._base_url}/{endpoint.lstrip('/')}",
             params=params,
             headers=self._get_headers()
@@ -67,7 +67,7 @@ class AbstractAPIClient(BaseAPIClient):
         """Make a POST request to the API with rate limiting."""
         await self._rate_limiter.acquire()
         
-        response = await self._http_client.post(
+        response = await self.http_client.post(
             f"{self._base_url}/{endpoint.lstrip('/')}",
             json=json_body,
             headers=self._get_headers()
