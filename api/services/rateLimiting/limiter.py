@@ -2,7 +2,7 @@ import time
 import asyncio
 
 from dataclasses import dataclass
-from config import Settings
+from config import settings
 
 @dataclass
 class RateLimitConfig:
@@ -46,7 +46,7 @@ class RateLimiter:
         self._requests.clear()
     
     @classmethod
-    def from_settings(cls, settings: Settings, service: str) -> 'RateLimiter':
+    def from_settings(cls, settings: settings, service: str) -> 'RateLimiter':
         """Create a rate limiter from settings."""
         config = RateLimitConfig(
             rate_limit=getattr(settings, f"{service.upper()}_RATE_LIMIT"),

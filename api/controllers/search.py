@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from api.clients import TMDbClient
 from api.services.embedding import EmbeddingService
-from config import get_logger, Settings
+from config import get_logger, settings
 from api.services.database import tv_collection, movies_collection, media_document
 from api.services.database.db_query import search_movie_by_title, search_tv_by_title
 from api.services.tmdb.model import SearchResults, SearchResult
@@ -18,7 +18,7 @@ class SearchController:
     def __init__(
         self,
         tmdb_client: TMDbClient,
-        settings: Settings
+        settings: settings
     ):
         self.movies_collection     = movies_collection
         self.tv_collection         = tv_collection
@@ -161,7 +161,7 @@ class SearchController:
 class SearchCache:
     def __init__(
         self,
-        settings: Settings
+        settings: settings
     ) -> None:
         self.settings  = settings
         self.ttl       = settings.SEARCH_CACHE_TTL
@@ -215,7 +215,7 @@ class SearchCache:
 class IngestionProcessor:
     def __init__(
         self,
-        settings: Settings,
+        settings: settings,
         embedding_service: EmbeddingService,
         tmdb_client: TMDbClient
     ):

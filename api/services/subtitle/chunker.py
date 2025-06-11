@@ -4,7 +4,7 @@ from langchain_experimental.text_splitter import SemanticChunker
 from langchain_openai import OpenAIEmbeddings
 
 from api.services.tmdb import TranscriptChunk
-from config import Settings, get_logger
+from config import settings, get_logger
 
 from .parser import SRTParser
 from .validator import SubtitleValidator
@@ -21,9 +21,9 @@ class SubtitleProcessor:
         self._validator = SubtitleValidator()
         self._chunker = SemanticChunker(
             OpenAIEmbeddings(),
-            breakpoint_threshold_type=Settings.CHUNK_BREAKPOINT_TYPE,
-            breakpoint_threshold_amount=Settings.CHUNK_BREAKPOINT_AMOUNT,
-            number_of_chunks=Settings.CHUNK_SIZE
+            breakpoint_threshold_type=settings.CHUNK_BREAKPOINT_TYPE,
+            breakpoint_threshold_amount=settings.CHUNK_BREAKPOINT_AMOUNT,
+            number_of_chunks=settings.CHUNK_SIZE
         )
     
     def _chunk_text(

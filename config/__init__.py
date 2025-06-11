@@ -14,12 +14,6 @@ from .dependencies import (
     get_tmdb_rate_limiter,
     get_opensubtitles_rate_limiter,
     # FastAPI dependencies
-    get_settings_dependency,
-    get_movies_collection_dependency,
-    get_tv_collection_dependency,
-    get_embedding_client_dependency,
-    get_tmdb_client_dependency,
-    get_opensubtitles_client_dependency
 )
 from dotenv import load_dotenv
 
@@ -30,8 +24,8 @@ settings = get_settings()
 
 __all__ = [
     # Settings
-    'Settings',
     'settings',
+    'Settings',
     # Core dependencies
     'get_settings',
     'get_http_client',
@@ -48,12 +42,6 @@ __all__ = [
     'get_tmdb_rate_limiter',
     'get_opensubtitles_rate_limiter',
     # FastAPI dependencies
-    'get_settings_dependency',
-    'get_movies_collection_dependency',
-    'get_tv_collection_dependency',
-    'get_embedding_client_dependency',
-    'get_tmdb_client_dependency',
-    'get_opensubtitles_client_dependency',
     # Logging
     'get_logger'
 ]

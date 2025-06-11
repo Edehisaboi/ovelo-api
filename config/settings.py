@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     DEFAULT_SORT_FIELD:      str = "release_date"
     DEFAULT_SORT_ORDER:      int = -1  # -1 for descending, 1 for ascending
 
+    """Vector search settings."""
+    RAG_TOP_K:          int = 5
+    VECTOR_PENALTY:     int = 50
+    FULLTEXT_PENALTY:   int = 50
+
     # ============= Text Processing Configuration =============
     """Text chunking and processing settings."""
     CHUNK_BREAKPOINT_TYPE:   Literal["percentile", "standard_deviation", "interquartile", "gradient"] = "percentile"

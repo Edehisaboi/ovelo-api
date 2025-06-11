@@ -5,7 +5,7 @@ import tiktoken
 from openai import OpenAI
 from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
 
-from config import Settings
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +16,12 @@ class EmbeddingClient:
     def __init__(
         self,
         client:         OpenAI,
-        model_name:     str = Settings.OPENAI_EMBEDDING_MODEL,
-        max_retries:    int = Settings.OPENAI_EMBEDDING_MAX_RETRIES,
-        batch_size:     int = Settings.OPENAI_EMBEDDING_BATCH_SIZE,
-        wait_min:       int = Settings.OPENAI_EMBEDDING_WAIT_MIN,
-        wait_max:       int = Settings.OPENAI_EMBEDDING_WAIT_MAX,
-        wait_multiplier: int = Settings.OPENAI_EMBEDDING_WAIT_MULTIPLIER
+        model_name:     str = settings.OPENAI_EMBEDDING_MODEL,
+        max_retries:    int = settings.OPENAI_EMBEDDING_MAX_RETRIES,
+        batch_size:     int = settings.OPENAI_EMBEDDING_BATCH_SIZE,
+        wait_min:       int = settings.OPENAI_EMBEDDING_WAIT_MIN,
+        wait_max:       int = settings.OPENAI_EMBEDDING_WAIT_MAX,
+        wait_multiplier: int = settings.OPENAI_EMBEDDING_WAIT_MULTIPLIER
     ):
         self.client =           client
         self.model_name =       model_name
@@ -37,8 +37,8 @@ class EmbeddingClient:
         if not text or not text.strip():
             raise ValueError("Text cannot be empty")
         token_count = len(self.tokenizer.encode(text))
-        if token_count > Settings.OPENAI_EMBEDDING_MAX_TOKENS:
-            raise ValueError(f"Text exceeds maximum token limit of {Settings.OPENAI_EMBEDDING_MAX_TOKENS} tokens")
+        if token_count > settings.OPENAI_EMBEDDING_MAX_TOKENS:
+            raise ValueError(f"Text exceeds maximum token limit of {settings.OPENAI_EMBEDDING_MAX_TOKENS} tokens")
 
     async def create_embedding(self, text: str) -> List[float]:
         """Generate embedding for a single text using OpenAI API with retries."""

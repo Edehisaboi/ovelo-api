@@ -5,7 +5,7 @@ from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 from pymongo.operations import IndexModel, SearchIndexModel
 
-from config import Settings, get_logger, get_movies_collection, get_tv_collection
+from config import settings, get_logger, get_movies_collection, get_tv_collection
 
 logger = get_logger(__name__)
 
@@ -51,13 +51,13 @@ async def _create_movie_indexes(collection: Collection):
             "fields": [
                 {
                     "type":          "vector",
-                    "path":          Settings.MOVIE_EMBEDDING_PATH,
-                    "numDimensions": Settings.MOVIE_NUM_DIMENSIONS,
-                    "similarity":    Settings.MOVIE_SIMILARITY
+                    "path":          settings.MOVIE_EMBEDDING_PATH,
+                    "numDimensions": settings.MOVIE_NUM_DIMENSIONS,
+                    "similarity":    settings.MOVIE_SIMILARITY
                 }
             ]
         },
-        name=Settings.MOVIE_INDEX_NAME,
+        name=settings.MOVIE_INDEX_NAME,
         type="vectorSearch"
     )
 
@@ -117,13 +117,13 @@ async def _create_tv_indexes(collection: Collection):
             "fields": [
                 {
                     "type":          "vector",
-                    "path":          Settings.TV_EMBEDDING_PATH,
-                    "numDimensions": Settings.TV_NUM_DIMENSIONS,
-                    "similarity":    Settings.TV_SIMILARITY
+                    "path":          settings.TV_EMBEDDING_PATH,
+                    "numDimensions": settings.TV_NUM_DIMENSIONS,
+                    "similarity":    settings.TV_SIMILARITY
                 }
             ]
         },
-        name=Settings.TV_INDEX_NAME,
+        name=settings.TV_INDEX_NAME,
         type="vectorSearch"
     )
 

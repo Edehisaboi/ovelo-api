@@ -6,7 +6,7 @@ from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-from config import Settings, settings
+from config import settings, Settings
 from api.clients import EmbeddingClient, OpenSubtitlesClient, TMDbClient
 from api.services.rateLimiting.limiter import RateLimiter
 
