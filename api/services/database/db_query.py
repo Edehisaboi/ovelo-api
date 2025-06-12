@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from pymongo.collection import Collection
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
-from config import settings, get_logger, get_movie_db, get_tv_db
+from config import settings, get_logger, movie_db, tv_db
 
 logger = get_logger(__name__)
 
@@ -333,18 +333,20 @@ logger = get_logger(__name__)
 
 
 def create_movie_hybrid_retriever(
+    movie_db,
     k: int = settings.RAG_TOP_K
 ) -> MongoDBAtlasHybridSearchRetriever:
     """Creates and returns a hybrid search retriever for movies.
 
     Args:
+        movie_db: An instance of MongoClientWrapper for movies.
         k (int, optional): Number of documents to retrieve. Defaults to settings.RAG_TOP_K.
 
     Returns:
         MongoDBAtlasHybridSearchRetriever: A configured hybrid search retriever for movies.
     """
     logger.info(f"Creating movie hybrid retriever with top_k: {k}")
-    return get_movie_db().get_hybrid_search_retriever(
+    return movie_db.get_hybrid_search_retriever(
         text_key="title",
         embedding_key=settings.MOVIE_EMBEDDING_PATH,
         index_name=settings.MOVIE_INDEX_NAME,
@@ -354,18 +356,20 @@ def create_movie_hybrid_retriever(
 
 
 def create_tv_hybrid_retriever(
+    tv_db,
     k: int = settings.RAG_TOP_K
 ) -> MongoDBAtlasHybridSearchRetriever:
     """Creates and returns a hybrid search retriever for TV shows.
 
     Args:
+        tv_db: An instance of MongoClientWrapper for TV shows.
         k (int, optional): Number of documents to retrieve. Defaults to settings.RAG_TOP_K.
 
     Returns:
         MongoDBAtlasHybridSearchRetriever: A configured hybrid search retriever for TV shows.
     """
     logger.info(f"Creating TV hybrid retriever with top_k: {k}")
-    return get_tv_db().get_hybrid_search_retriever(
+    return tv_db.get_hybrid_search_retriever(
         text_key="name",
         embedding_key=settings.TV_EMBEDDING_PATH,
         index_name=settings.TV_INDEX_NAME,

@@ -13,8 +13,7 @@ class EmbeddingClient:
 
     @property
     def get_openai_embedding_model(
-        self,
-        model_name: str = settings.OPENAI_EMBEDDING_MODEL
+        self
     ) -> OpenAIEmbeddings:
         return OpenAIEmbeddings(
             model=self.model_name,

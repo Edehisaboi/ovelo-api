@@ -1,14 +1,13 @@
 from functools import lru_cache
 
 import httpx
-from openai import OpenAI
-from pymongo import MongoClient
-from pymongo.collection import Collection
-from pymongo.database import Database
 
 from config import settings, Settings
 from api.services.database import movie_db, tv_db, MongoClientWrapper
-from api.clients import EmbeddingClient, OpenSubtitlesClient, TMDbClient
+from api.clients import (
+    EmbeddingClient, OpenSubtitlesClient, TMDbClient,
+    embedding_client
+)
 from api.services.rateLimiting.limiter import RateLimiter
 
 
@@ -37,15 +36,9 @@ def get_tv_db() -> MongoClientWrapper:
 
 
 @lru_cache()
-def get_openai_client() -> OpenAI:
-    """Get a singleton OpenAI client instance."""
-    return OpenAI(api_key=settings.OPENAI_API_KEY)
-
-
-@lru_cache()
 def get_embedding_client() -> EmbeddingClient:
     """Get a singleton EmbeddingClient instance."""
-    return EmbeddingClient(client=get_openai_client())
+    return embedding_client
 
 
 @lru_cache()

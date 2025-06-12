@@ -8,5 +8,7 @@ __all__ = [
     # Classes
     "OpenSubtitlesClient",
     "TMDbClient",
+    "EmbeddingClient",
+    # Instances
     "embedding_client"
 ]

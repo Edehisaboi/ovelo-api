@@ -7,9 +7,9 @@ from pymongo import MongoClient, errors
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
-from config import settings, get_logger
+from config import settings, get_logger, embedding_client
+from .index import MongoIndex
 from ..document import movie_document, tv_document
-from api.clients import embedding_client
 
 logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
@@ -34,6 +34,7 @@ class MongoClientWrapper(Generic[T]):
         mongodb_uri (str): MongoDB connection URI.
         client (MongoClient): MongoDB client instance for database connections.
         database (Database): Reference to the target MongoDB database.
+        retriever (Optional[MongoDBAtlasHybridSearchRetriever]): Hybrid search retriever instance.
     """
 
     def __init__(
@@ -41,7 +42,7 @@ class MongoClientWrapper(Generic[T]):
             model:              Type[T],
             collection_name:    str,
             database_name:      str = settings.MONGODB_DB,
-            mongodb_uri:        str = settings.MONGODB_URL
+            mongodb_uri:        str = settings.MONGODB_URL,
     ) -> None:
         """Initialize a connection to the MongoDB collection.
 
@@ -60,6 +61,7 @@ class MongoClientWrapper(Generic[T]):
         self.collection_name  = collection_name
         self.database_name    = database_name
         self.mongodb_uri      = mongodb_uri
+        self.retriever        = None
 
         try:
             self.client = MongoClient(mongodb_uri, appname="moovzmatch")
@@ -91,6 +93,52 @@ class MongoClientWrapper(Generic[T]):
             exc_tb: Traceback of exception that occurred, if any.
         """
         self.close()
+
+    def initialize_indexes(self) -> None:
+        """Initialize indexes for the collection.
+        
+        This method creates both vector search and traditional indexes for the collection.
+        It also initializes the hybrid search retriever if not already initialized.
+        """
+        try:
+            # Get collection-specific settings
+            if self.collection_name == settings.MOVIES_COLLECTION:
+                embedding_dim = settings.MOVIE_NUM_DIMENSIONS
+                index_name = settings.MOVIE_INDEX_NAME
+                text_field = settings.MOVIE_TEXT_FIELD
+                embedding_path = settings.MOVIE_EMBEDDING_PATH
+                similarity_metric = settings.MOVIE_SIMILARITY
+            else:
+                embedding_dim = settings.TV_NUM_DIMENSIONS
+                index_name = settings.TV_INDEX_NAME
+                text_field = settings.TV_TEXT_FIELD
+                embedding_path = settings.TV_EMBEDDING_PATH
+                similarity_metric = settings.TV_SIMILARITY
+
+            # Initialize the retriever if not already done
+            if not self.retriever:
+                self.retriever = self.get_hybrid_search_retriever(
+                    text_key=text_field,
+                    embedding_key=embedding_path,
+                    index_name=index_name,
+                    similarity_metric=similarity_metric
+                )
+
+            # Create indexes
+            index = MongoIndex(
+                retriever=self.retriever,
+                collection=self.collection,
+                collection_type=self.collection_name
+            )
+            index.create(
+                embedding_dim=embedding_dim,
+                index_name=index_name,
+                text_field=text_field,
+                is_hybrid=True
+            )
+        except Exception as e:
+            logger.error(f"Error initializing indexes: {e}")
+            raise
 
     def clear_collection(self) -> None:
         """Remove all documents from the collection.
