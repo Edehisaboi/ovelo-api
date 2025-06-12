@@ -1,4 +1,5 @@
-from typing import Generic, Type, TypeVar
+from datetime import datetime
+from typing import Generic, Type, TypeVar, List, Dict, Optional
 
 from bson import ObjectId
 from pydantic import BaseModel
@@ -237,6 +238,84 @@ class MongoClientWrapper(Generic[T]):
             vector_penalty     = settings.VECTOR_PENALTY,
             fulltext_penalty   = settings.FULLTEXT_PENALTY
         )
+
+    def search_by_title(
+            self,
+            title:          str,
+            exact_match:    bool = False,
+            language:       Optional[str] = None,
+            country:        Optional[str] = None,
+            year:           Optional[int] = None,
+            limit:          int = settings.MAX_RESULTS_PER_PAGE
+    ) -> List[Dict]:
+        """Search for documents by title with optional filters.
+
+        Args:
+            title (str): The title to search for.
+            exact_match (bool, optional): Whether to perform an exact match search.
+                Defaults to False.
+            language (Optional[str], optional): Language filter. Defaults to None.
+            country (Optional[str], optional): Country filter. Defaults to None.
+            year (Optional[int], optional): Year filter. Defaults to None.
+            limit (int, optional): Maximum number of results to return. Defaults to settings.MAX_RESULTS_PER_PAGE.
+
+        Returns:
+            List[Dict]: List of matching documents.
+        """
+        # Set date_field based on collection if not provided
+        date_field = "release_date" if self.collection_name == settings.MOVIES_COLLECTION else "first_air_date"
+
+        base_filter = {}
+        if exact_match:
+            if self.collection_name == settings.MOVIES_COLLECTION:
+                base_filter["$or"] = [
+                    {"title": title},
+                    {"original_title": title}
+                ]
+            else:
+                base_filter["$or"] = [
+                    {"name": title},
+                    {"original_name": title}
+                ]
+        else:
+            base_filter["$text"] = {"$search": title}
+
+        if language:
+            base_filter["spoken_languages.name"] = language or settings.TMDB_LANGUAGE
+        if country:
+            base_filter["origin_country"] = country or settings.TMDB_REGION
+        if year:
+            base_filter[date_field] = {
+                "$gte": datetime(year, 1, 1),
+                "$lt":  datetime(year + 1, 1, 1)
+            }
+
+        match_stage = {"$match": base_filter}
+        if exact_match:
+            pipeline = [match_stage]
+        else:
+            sort_stage = {"$sort": {"score": {"$meta": "textScore"}}}
+            pipeline = [match_stage, sort_stage]
+
+        # Create projection from model fields
+        projection = {
+            field: 1 for field in self.model.model_fields.keys()
+        }
+        # Add score field for text search
+        if not exact_match:
+            projection["score"] = {"$meta": "textScore"}
+
+        project_stage = {"$project": projection}
+        pipeline.append(project_stage)
+
+        if limit:
+            pipeline.append({"$limit": limit})
+
+        try:
+            return list(self.collection.aggregate(pipeline))
+        except errors.PyMongoError as e:
+            logger.error(f"Error performing title search: {e}")
+            raise
 
     def close(self) -> None:
         """Close the MongoDB connection.

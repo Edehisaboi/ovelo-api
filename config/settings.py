@@ -75,7 +75,6 @@ class Settings(BaseSettings):
     TV_SEARCH_LIMIT:         int = 2
     NUM_CANDIDATES:          int = 100
     MAX_RESULTS_PER_PAGE:    int = 10
-    DEFAULT_SORT_FIELD:      str = "release_date"
     DEFAULT_SORT_ORDER:      int = -1  # -1 for descending, 1 for ascending
 
     """Vector search settings."""

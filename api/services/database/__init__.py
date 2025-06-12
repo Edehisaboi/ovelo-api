@@ -1,17 +1,16 @@
-from pydantic import BaseModel
-
 from config import settings
 from .mongo import MongoClientWrapper
 from .index import setup_indexes
+from api.services.tmdb.model import MovieDetails, TVDetails
 
 # Create singleton instances for movies and TV shows
 movie_db = MongoClientWrapper(
-    model=BaseModel,  # This will be overridden by the document builder
+    model=MovieDetails,  # This will be overridden by the document builder
     collection_name=settings.MOVIES_COLLECTION
 )
 
 tv_db = MongoClientWrapper(
-    model=BaseModel,  # This will be overridden by the document builder
+    model=TVDetails,  # This will be overridden by the document builder
     collection_name=settings.TV_COLLECTION
 )
 
