@@ -1,18 +1,35 @@
-from api.services.database.index import setup_indexes
-from ..document.movie import MovieDocumentBuilder
-from ..document.tv import TVDocumentBuilder
+from pydantic import BaseModel
 
-# Create document builders
-movie_document = MovieDocumentBuilder()
-tv_document = TVDocumentBuilder()
+from config import settings
+from .mongo import MongoClientWrapper
+from .index import setup_indexes
+
+# Create singleton instances for movies and TV shows
+movie_db = MongoClientWrapper(
+    model=BaseModel,  # This will be overridden by the document builder
+    collection_name=settings.MOVIES_COLLECTION
+)
+
+tv_db = MongoClientWrapper(
+    model=BaseModel,  # This will be overridden by the document builder
+    collection_name=settings.TV_COLLECTION
+)
+
 
 async def index_database():
     """Initialize the database indexes for both collections."""
     await setup_indexes()
 
+
+# Export all necessary components
 __all__ = [
-    # Functions
-    'index_database',
     # Classes
-    'movie_document', 'tv_document'
+    'MongoClientWrapper',
+    
+    # Database instances
+    'movie_db',
+    'tv_db',
+    
+    # Functions
+    'index_database'
 ]

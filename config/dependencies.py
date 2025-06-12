@@ -7,6 +7,7 @@ from pymongo.collection import Collection
 from pymongo.database import Database
 
 from config import settings, Settings
+from api.services.database import movie_db, tv_db, MongoClientWrapper
 from api.clients import EmbeddingClient, OpenSubtitlesClient, TMDbClient
 from api.services.rateLimiting.limiter import RateLimiter
 
@@ -24,27 +25,15 @@ def get_http_client() -> httpx.AsyncClient:
 
 
 @lru_cache()
-def get_mongo_client() -> MongoClient:
-    """Get a singleton MongoDB client instance."""
-    return MongoClient(settings.MONGODB_URL)
+def get_movie_db() -> MongoClientWrapper:
+    """Get a singleton instance of the movie database wrapper."""
+    return movie_db
 
 
 @lru_cache()
-def get_mongo_db() -> Database:
-    """Get the MongoDB database instance."""
-    return get_mongo_client()[settings.MONGODB_DB]
-
-
-@lru_cache()
-def get_movies_collection() -> Collection:
-    """Get the movies collection from MongoDB."""
-    return get_mongo_db()[settings.MOVIES_COLLECTION]
-
-
-@lru_cache()
-def get_tv_collection() -> Collection:
-    """Get the TV shows collection from MongoDB."""
-    return get_mongo_db()[settings.TV_COLLECTION]
+def get_tv_db() -> MongoClientWrapper:
+    """Get a singleton instance of the TV database wrapper."""
+    return tv_db
 
 
 @lru_cache()
@@ -63,10 +52,10 @@ def get_embedding_client() -> EmbeddingClient:
 def get_tmdb_client() -> TMDbClient:
     """Get a singleton TMDb client instance."""
     return TMDbClient(
-        api_key=settings.TMDB_API_KEY,
-        http_client=get_http_client(),
-        rate_limiter=get_tmdb_rate_limiter(),
-        base_url= settings.TMDB_BASE_URL
+        api_key        = settings.TMDB_API_KEY,
+        http_client    = get_http_client(),
+        rate_limiter   = get_tmdb_rate_limiter(),
+        base_url       = settings.TMDB_BASE_URL
     )
 
 
@@ -74,10 +63,10 @@ def get_tmdb_client() -> TMDbClient:
 def get_opensubtitles_client() -> OpenSubtitlesClient:
     """Get a singleton OpenSubtitles client instance."""
     return OpenSubtitlesClient(
-        api_key=settings.OPENSUBTITLES_API_KEY,
-        http_client=get_http_client(),
-        rate_limiter=get_opensubtitles_rate_limiter(),
-        base_url=settings.OPENSUBTITLES_BASE_URL
+        api_key        = settings.OPENSUBTITLES_API_KEY,
+        http_client    = get_http_client(),
+        rate_limiter   = get_opensubtitles_rate_limiter(),
+        base_url       = settings.OPENSUBTITLES_BASE_URL
     )
 
 

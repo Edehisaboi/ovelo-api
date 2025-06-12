@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_BATCH_SIZE:     int  = 100
     OPENAI_EMBEDDING_WAIT_MIN:       int  = 4
     OPENAI_EMBEDDING_WAIT_MAX:       int  = 10
-    OPENAI_EMBEDDING_WAIT_MULTIPLIER: int = 1
+    OPENAI_EMBEDDING_TIMEOUT:        int  = 30
 
     # ============= TMDb API Configuration =============
     """TMDb API settings for movie and TV show data."""

@@ -1,12 +1,10 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from langchain_community.llms.openai import OpenAI
 from pymongo.collection import Collection
-from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
-from config import settings, get_logger, get_embedding_client
+from config import settings, get_logger, get_movie_db, get_tv_db
 
 logger = get_logger(__name__)
 
@@ -334,106 +332,43 @@ def search_tv_by_title(
     return list(collection.aggregate(pipeline))
 
 
-def get_movie_retriever(
-    model_name: str = settings.OPENAI_EMBEDDING_MODEL,
+def create_movie_hybrid_retriever(
     k: int = settings.RAG_TOP_K
 ) -> MongoDBAtlasHybridSearchRetriever:
     """Creates and returns a hybrid search retriever for movies.
 
     Args:
-        model_name (str, optional): The name of the OpenAI embedding model to use.
-            Defaults to settings.OPENAI_EMBEDDING_MODEL.
         k (int, optional): Number of documents to retrieve. Defaults to settings.RAG_TOP_K.
 
     Returns:
         MongoDBAtlasHybridSearchRetriever: A configured hybrid search retriever for movies.
     """
-    logger.info(
-        f"Initializing movie vector hybrid retriever | model: {model_name} | top_k: {k}"
-    )
-
-    embedding_model = get_embedding_client()
-
-    return get_hybrid_search_retriever(
-        embedding_model=embedding_model,
-        k=k,
-        collection_name=settings.MOVIES_COLLECTION,
-        text_key="title",  # or "overview" depending on your needs
+    logger.info(f"Creating movie hybrid retriever with top_k: {k}")
+    return get_movie_db().get_hybrid_search_retriever(
+        text_key="title",
         embedding_key=settings.MOVIE_EMBEDDING_PATH,
         index_name=settings.MOVIE_INDEX_NAME,
-        similarity_metric=settings.MOVIE_SIMILARITY
+        similarity_metric=settings.MOVIE_SIMILARITY,
+        k=k
     )
 
 
-def get_tv_retriever(
-    model_name: str = settings.OPENAI_EMBEDDING_MODEL,
+def create_tv_hybrid_retriever(
     k: int = settings.RAG_TOP_K
 ) -> MongoDBAtlasHybridSearchRetriever:
     """Creates and returns a hybrid search retriever for TV shows.
 
     Args:
-        model_name (str, optional): The name of the OpenAI embedding model to use.
-            Defaults to settings.OPENAI_EMBEDDING_MODEL.
         k (int, optional): Number of documents to retrieve. Defaults to settings.RAG_TOP_K.
 
     Returns:
         MongoDBAtlasHybridSearchRetriever: A configured hybrid search retriever for TV shows.
     """
-    logger.info(
-        f"Initializing TV vector hybrid retriever | model: {model_name} | top_k: {k}"
-    )
-
-    embedding_model = get_embedding_client()
-
-    return get_hybrid_search_retriever(
-        embedding_model=embedding_model,
-        k=k,
-        collection_name=settings.TV_COLLECTION,
-        text_key="name",  # or "overview" depending on your needs
+    logger.info(f"Creating TV hybrid retriever with top_k: {k}")
+    return get_tv_db().get_hybrid_search_retriever(
+        text_key="name",
         embedding_key=settings.TV_EMBEDDING_PATH,
         index_name=settings.TV_INDEX_NAME,
-        similarity_metric=settings.TV_SIMILARITY
+        similarity_metric=settings.TV_SIMILARITY,
+        k=k
     )
-
-
-def get_hybrid_search_retriever(
-    embedding_model: OpenAI,
-    k: int,
-    collection_name: str,
-    text_key: str,
-    embedding_key: str,
-    index_name: str,
-    similarity_metric: str
-) -> MongoDBAtlasHybridSearchRetriever:
-    """Creates a MongoDB Atlas hybrid search retriever with the given configuration.
-
-    Args:
-        embedding_model (OpenAI): The embedding model to use for vector search.
-        k (int): Number of documents to retrieve.
-        collection_name (str): Name of the MongoDB collection to search.
-        text_key (str): Field to use for text search.
-        embedding_key (str): Field to use for vector search.
-        index_name (str): Name of the search index to use.
-        similarity_metric (str): Similarity metric to use for vector search.
-
-    Returns:
-        MongoDBAtlasHybridSearchRetriever: A configured hybrid search retriever.
-    """
-    vectorstore = MongoDBAtlasVectorSearch.from_connection_string(
-        connection_string=settings.MONGODB_URL,
-        embedding=embedding_model,
-        namespace=f"{settings.MONGODB_DB}.{collection_name}",
-        text_key=text_key,
-        embedding_key=embedding_key,
-        relevance_score_fn=similarity_metric,
-    )
-
-    retriever = MongoDBAtlasHybridSearchRetriever(
-        vectorstore=vectorstore,
-        search_index_name=index_name,
-        top_k=k,
-        vector_penalty=settings.VECTOR_PENALTY,
-        fulltext_penalty=settings.FULLTEXT_PENALTY
-    )
-
-    return retriever

@@ -3,12 +3,9 @@ from .logging import get_logger
 from .dependencies import (
     get_settings,
     get_http_client,
-    get_mongo_client,
-    get_mongo_db,
-    get_movies_collection,
-    get_tv_collection,
+    get_movie_db,
+    get_tv_db,
     get_openai_client,
-    get_embedding_client,
     get_tmdb_client,
     get_opensubtitles_client,
     get_tmdb_rate_limiter,
@@ -29,13 +26,10 @@ __all__ = [
     # Core dependencies
     'get_settings',
     'get_http_client',
-    'get_mongo_client',
-    'get_mongo_db',
-    'get_movies_collection',
-    'get_tv_collection',
+    'get_movie_db',
+    'get_tv_db',
     # API clients
     'get_openai_client',
-    'get_embedding_client',
     'get_tmdb_client',
     'get_opensubtitles_client',
     # Rate limiters
