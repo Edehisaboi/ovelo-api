@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     MOVIE_EMBEDDING_PATH:    str = "embedding"
     TV_EMBEDDING_PATH:       str = "embedding"
 
+    # Text paths
+    MOVIE_TEXT_PATH:         str = "text"
+    TV_TEXT_PATH:            str = "text"
+
     # Vector dimensions
     MOVIE_NUM_DIMENSIONS:    int = 1536
     TV_NUM_DIMENSIONS:       int = 1536

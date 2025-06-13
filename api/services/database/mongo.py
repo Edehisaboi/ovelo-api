@@ -12,7 +12,7 @@ from .index import MongoIndex
 from ..document import movie_document, tv_document
 
 logger = get_logger(__name__)
-T = TypeVar("T", bound=BaseModel)
+T      = TypeVar("T", bound=BaseModel)
 
 
 class MongoClientWrapper(Generic[T]):
@@ -38,11 +38,11 @@ class MongoClientWrapper(Generic[T]):
     """
 
     def __init__(
-            self,
-            model:              Type[T],
-            collection_name:    str,
-            database_name:      str = settings.MONGODB_DB,
-            mongodb_uri:        str = settings.MONGODB_URL,
+        self,
+        model:           Type[T],
+        collection_name: str,
+        database_name:   str = settings.MONGODB_DB,
+        mongodb_uri:     str = settings.MONGODB_URL,
     ) -> None:
         """Initialize a connection to the MongoDB collection.
 
@@ -57,11 +57,11 @@ class MongoClientWrapper(Generic[T]):
         Raises:
             Exception: If connection to MongoDB fails.
         """
-        self.model            = model
-        self.collection_name  = collection_name
-        self.database_name    = database_name
-        self.mongodb_uri      = mongodb_uri
-        self.retriever        = None
+        self.model           = model
+        self.collection_name = collection_name
+        self.database_name   = database_name
+        self.mongodb_uri     = mongodb_uri
+        self.retriever       = None
 
         try:
             self.client = MongoClient(mongodb_uri, appname="moovzmatch")
@@ -80,7 +80,7 @@ class MongoClientWrapper(Generic[T]):
         """Enable context manager support.
 
         Returns:
-            MongoDBService: The current instance.
+            MongoClientWrapper: The current instance.
         """
         return self
 
@@ -96,45 +96,45 @@ class MongoClientWrapper(Generic[T]):
 
     def initialize_indexes(self) -> None:
         """Initialize indexes for the collection.
-        
+
         This method creates both vector search and traditional indexes for the collection.
         It also initializes the hybrid search retriever if not already initialized.
         """
         try:
             # Get collection-specific settings
             if self.collection_name == settings.MOVIES_COLLECTION:
-                embedding_dim = settings.MOVIE_NUM_DIMENSIONS
-                index_name = settings.MOVIE_INDEX_NAME
-                text_field = settings.MOVIE_TEXT_FIELD
-                embedding_path = settings.MOVIE_EMBEDDING_PATH
+                embedding_dim     = settings.MOVIE_NUM_DIMENSIONS
+                index_name        = settings.MOVIE_INDEX_NAME
+                text_field        = settings.MOVIE_TEXT_PATH
+                embedding_path    = settings.MOVIE_EMBEDDING_PATH
                 similarity_metric = settings.MOVIE_SIMILARITY
             else:
-                embedding_dim = settings.TV_NUM_DIMENSIONS
-                index_name = settings.TV_INDEX_NAME
-                text_field = settings.TV_TEXT_FIELD
-                embedding_path = settings.TV_EMBEDDING_PATH
+                embedding_dim     = settings.TV_NUM_DIMENSIONS
+                index_name        = settings.TV_INDEX_NAME
+                text_field        = settings.TV_TEXT_PATH
+                embedding_path    = settings.TV_EMBEDDING_PATH
                 similarity_metric = settings.TV_SIMILARITY
 
             # Initialize the retriever if not already done
             if not self.retriever:
-                self.retriever = self.get_hybrid_search_retriever(
-                    text_key=text_field,
-                    embedding_key=embedding_path,
-                    index_name=index_name,
-                    similarity_metric=similarity_metric
+                self.retriever = self._get_hybrid_search_retriever(
+                    text_key          = text_field,
+                    embedding_key     = embedding_path,
+                    index_name        = index_name,
+                    similarity_metric = similarity_metric
                 )
 
             # Create indexes
             index = MongoIndex(
-                retriever=self.retriever,
-                collection=self.collection,
-                collection_type=self.collection_name
+                retriever       = self.retriever,
+                collection      = self.collection,
+                collection_type = self.collection_name
             )
             index.create(
-                embedding_dim=embedding_dim,
-                index_name=index_name,
-                text_field=text_field,
-                is_hybrid=True
+                embedding_dim = embedding_dim,
+                index_name    = index_name,
+                text_field    = text_field,
+                is_hybrid     = True
             )
         except Exception as e:
             logger.error(f"Error initializing indexes: {e}")
@@ -182,12 +182,11 @@ class MongoClientWrapper(Generic[T]):
             else:
                 doc_dict = document.model_dump()
 
-            result = self.collection.insert_one(doc_dict)
+            result      = self.collection.insert_one(doc_dict)
             document_id = str(result.inserted_id)
 
             logger.debug(f"Inserted document with ID: {document_id}")
             return document_id
-
         except errors.PyMongoError as e:
             logger.error(f"Error inserting document: {e}")
             raise
@@ -230,9 +229,139 @@ class MongoClientWrapper(Generic[T]):
                 logger.warning(f"No document found with ID: {document_id}")
 
             return success
-
         except errors.PyMongoError as e:
             logger.error(f"Error updating document: {e}")
+            raise
+
+    def search_by_title(
+        self,
+        title:       str,
+        exact_match: bool = False,
+        language:    Optional[str] = None,
+        country:     Optional[str] = None,
+        year:        Optional[int] = None,
+        limit:       int = settings.MAX_RESULTS_PER_PAGE
+    ) -> List[Dict]:
+        """Search for documents by title with optional filters.
+
+        Args:
+            title (str): The title to search for.
+            exact_match (bool, optional): Whether to perform an exact match search.
+                Defaults to False.
+            language (Optional[str], optional): Language filter. Defaults to None.
+            country (Optional[str], optional): Country filter. Defaults to None.
+            year (Optional[int], optional): Year filter. Defaults to None.
+            limit (int, optional): Maximum number of results to return. Defaults to settings.MAX_RESULTS_PER_PAGE.
+
+        Returns:
+            List[Dict]: List of matching documents.
+        """
+        try:
+            # Set date_field based on collection
+            date_field = "release_date" if self.collection_name == settings.MOVIES_COLLECTION else "first_air_date"
+
+            base_filter = {}
+            if exact_match:
+                if self.collection_name == settings.MOVIES_COLLECTION:
+                    base_filter["$or"] = [
+                        {"title": title},
+                        {"original_title": title}
+                    ]
+                else:
+                    base_filter["$or"] = [
+                        {"name": title},
+                        {"original_name": title}
+                    ]
+            else:
+                base_filter["$text"] = {"$search": title}
+
+            if language:
+                base_filter["spoken_languages.name"] = language or settings.TMDB_LANGUAGE
+            if country:
+                base_filter["origin_country"] = country or settings.TMDB_REGION
+            if year:
+                base_filter[date_field] = {
+                    "$gte": datetime(year, 1, 1),
+                    "$lt":  datetime(year + 1, 1, 1)
+                }
+
+            match_stage = {"$match": base_filter}
+            if exact_match:
+                pipeline = [match_stage]
+            else:
+                sort_stage = {"$sort": {"score": {"$meta": "textScore"}}}
+                pipeline = [match_stage, sort_stage]
+
+            # Create projection from model fields
+            projection = {
+                field: 1 for field in self.model.model_fields.keys()
+            }
+            # Add score field for text search
+            if not exact_match:
+                projection["score"] = {"$meta": "textScore"}
+
+            project_stage = {"$project": projection}
+            pipeline.append(project_stage)
+
+            if limit:
+                pipeline.append({"$limit": limit})
+
+            return list(self.collection.aggregate(pipeline))
+        except errors.PyMongoError as e:
+            logger.error(f"Error performing title search: {e}")
+            raise
+
+    def vector_search(
+        self,
+        query: str,
+        limit: int = settings.RAG_TOP_K,
+        filter_criteria: Optional[Dict] = None
+    ) -> List[T]:
+        """Perform a hybrid vector search on the collection.
+
+        This method combines vector search with text search to find the most relevant documents
+        based on both semantic similarity and text matching.
+
+        Args:
+            query (str): The search query text.
+            limit (int, optional): Maximum number of results to return. Defaults to settings.RAG_TOP_K.
+            filter_criteria (Optional[Dict], optional): Additional MongoDB filter criteria.
+                Defaults to None.
+
+        Returns:
+            List[T]: List of model instances (MovieDetails or TVDetails) with their relevance scores.
+
+        Raises:
+            ValueError: If the retriever is not initialized.
+            Exception: If the search operation fails.
+        """
+        try:
+            if not self.retriever:
+                raise ValueError("Hybrid search retriever not initialized. Call initialize_indexes() first.")
+
+            # Perform the hybrid search
+            results = self.retriever.get_relevant_documents(
+                query=query,
+                k=limit,
+                filter=filter_criteria
+            )
+
+            # Convert results to model instances
+            documents = []
+            for doc in results:
+                # Get the document data
+                doc_dict = doc.dict()
+                if hasattr(doc, 'metadata'):
+                    doc_dict.update(doc.metadata)
+                
+                # Create model instance
+                model_instance = self.model(**doc_dict)
+                documents.append(model_instance)
+
+            return documents
+
+        except Exception as e:
+            logger.error(f"Error performing vector search: {e}")
             raise
 
     def get_collection_count(self) -> int:
@@ -250,13 +379,13 @@ class MongoClientWrapper(Generic[T]):
             logger.error(f"Error counting documents in MongoDB: {e}")
             raise
 
-    def get_hybrid_search_retriever(
-            self,
-            text_key:           str,
-            embedding_key:      str,
-            index_name:         str,
-            similarity_metric:  str,
-            k:                  int = settings.RAG_TOP_K
+    def _get_hybrid_search_retriever(
+        self,
+        text_key:          str,
+        embedding_key:     str,
+        index_name:        str,
+        similarity_metric: str,
+        k:                 int = settings.RAG_TOP_K
     ) -> MongoDBAtlasHybridSearchRetriever:
         """Get a hybrid search retriever for this collection.
 
@@ -280,90 +409,12 @@ class MongoClientWrapper(Generic[T]):
         )
 
         return MongoDBAtlasHybridSearchRetriever(
-            vectorstore        = vectorstore,
-            search_index_name  = index_name,
-            top_k              = k,
-            vector_penalty     = settings.VECTOR_PENALTY,
-            fulltext_penalty   = settings.FULLTEXT_PENALTY
+            vectorstore       = vectorstore,
+            search_index_name = index_name,
+            top_k             = k,
+            vector_penalty    = settings.VECTOR_PENALTY,
+            fulltext_penalty  = settings.FULLTEXT_PENALTY
         )
-
-    def search_by_title(
-            self,
-            title:          str,
-            exact_match:    bool = False,
-            language:       Optional[str] = None,
-            country:        Optional[str] = None,
-            year:           Optional[int] = None,
-            limit:          int = settings.MAX_RESULTS_PER_PAGE
-    ) -> List[Dict]:
-        """Search for documents by title with optional filters.
-
-        Args:
-            title (str): The title to search for.
-            exact_match (bool, optional): Whether to perform an exact match search.
-                Defaults to False.
-            language (Optional[str], optional): Language filter. Defaults to None.
-            country (Optional[str], optional): Country filter. Defaults to None.
-            year (Optional[int], optional): Year filter. Defaults to None.
-            limit (int, optional): Maximum number of results to return. Defaults to settings.MAX_RESULTS_PER_PAGE.
-
-        Returns:
-            List[Dict]: List of matching documents.
-        """
-        # Set date_field based on collection if not provided
-        date_field = "release_date" if self.collection_name == settings.MOVIES_COLLECTION else "first_air_date"
-
-        base_filter = {}
-        if exact_match:
-            if self.collection_name == settings.MOVIES_COLLECTION:
-                base_filter["$or"] = [
-                    {"title": title},
-                    {"original_title": title}
-                ]
-            else:
-                base_filter["$or"] = [
-                    {"name": title},
-                    {"original_name": title}
-                ]
-        else:
-            base_filter["$text"] = {"$search": title}
-
-        if language:
-            base_filter["spoken_languages.name"] = language or settings.TMDB_LANGUAGE
-        if country:
-            base_filter["origin_country"] = country or settings.TMDB_REGION
-        if year:
-            base_filter[date_field] = {
-                "$gte": datetime(year, 1, 1),
-                "$lt":  datetime(year + 1, 1, 1)
-            }
-
-        match_stage = {"$match": base_filter}
-        if exact_match:
-            pipeline = [match_stage]
-        else:
-            sort_stage = {"$sort": {"score": {"$meta": "textScore"}}}
-            pipeline = [match_stage, sort_stage]
-
-        # Create projection from model fields
-        projection = {
-            field: 1 for field in self.model.model_fields.keys()
-        }
-        # Add score field for text search
-        if not exact_match:
-            projection["score"] = {"$meta": "textScore"}
-
-        project_stage = {"$project": projection}
-        pipeline.append(project_stage)
-
-        if limit:
-            pipeline.append({"$limit": limit})
-
-        try:
-            return list(self.collection.aggregate(pipeline))
-        except errors.PyMongoError as e:
-            logger.error(f"Error performing title search: {e}")
-            raise
 
     def close(self) -> None:
         """Close the MongoDB connection.
