@@ -6,7 +6,6 @@ from .base import DocumentBuilder
 
 class MovieDocumentBuilder(DocumentBuilder[MovieDetails]):
     """Builder for movie documents."""
-    
     def build(self, movie: MovieDetails) -> Dict[str, Any]:
         """Build a movie document from MovieDetails."""
         self._update_timestamp()

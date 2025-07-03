@@ -9,7 +9,8 @@ logger = get_logger(__name__)
 class SubtitleValidator:
     """Validator for subtitle content."""
     
-    def validate(self, srt_content: str) -> None:
+    @staticmethod
+    def validate(srt_content: str) -> None:
         """Validate SRT content."""
         if not srt_content or not isinstance(srt_content, str):
             raise ValueError("SRT content must be a non-empty string")
@@ -31,7 +32,8 @@ class SubtitleValidator:
         if not has_timestamp:
             raise ValueError("SRT content must contain valid timestamps")
     
-    def validate_chunks(self, chunks: List[str]) -> None:
+    @staticmethod
+    def validate_chunks(chunks: List[str]) -> None:
         """Validate subtitle chunks."""
         if not chunks:
             raise ValueError("No chunks to validate")

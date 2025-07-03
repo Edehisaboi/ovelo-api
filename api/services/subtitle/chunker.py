@@ -68,7 +68,8 @@ class SubtitleProcessor:
                 chunked_subtitles.append(
                     TranscriptChunk(
                         index=i,
-                        text=chunk
+                        text=chunk,
+                        embedding=None # This will be set later by the embedding service
                     )
                 )
             
