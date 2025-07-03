@@ -31,17 +31,21 @@ __all__ = [
     # Settings
     'settings',
     'Settings',
+
     # Core instances
     'http_client',
     'movie_db',
     'tv_db',
     'embedding_client',
+
     # API clients
     'tmdb_client',
     'opensubtitles_client',
+
     # Rate limiters
     'tmdb_rate_limiter',
     'opensubtitles_rate_limiter',
+
     # FastAPI dependencies
 
     # Logging

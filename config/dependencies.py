@@ -13,7 +13,7 @@ from api.services.rateLimiting.limiter import RateLimiter
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Get a singleton settings instance."""
+    """Get a singleton setting instance."""
     return Settings()
 
 
