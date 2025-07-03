@@ -232,13 +232,13 @@ class MongoIndex:
             if not self.collection:
                 raise ValueError("MongoDB collection is not initialized")
 
-            # Create vector search index
+            # Create a vector search index
             vector_created = self._create_vector_index(embedding_dim=embedding_dim)
 
             # Create traditional indexes
             traditional_created = self._create_traditional_indexes()
 
-            # Create full-text search index if hybrid search is enabled
+            # Create a full-text search index if hybrid search is enabled
             fulltext_created = False
             if is_hybrid:
                 fulltext_created = self._create_fulltext_index(

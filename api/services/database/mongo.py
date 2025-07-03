@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Generic, Type, TypeVar, List, Dict, Optional
 
 from bson import ObjectId
@@ -25,7 +24,7 @@ class MongoClientWrapper(Generic[T]):
         model (Type[T]): The Pydantic model class to use for document serialization.
         collection_name (str): Name of the MongoDB collection to use.
         database_name (str, optional): Name of the MongoDB database to use.
-        mongodb_uri (str, optional): URI for connecting to MongoDB instance.
+        mongodb_uri (str, optional): URI for connecting to a MongoDB instance.
 
     Attributes:
         model (Type[T]): The Pydantic model class used for document serialization.
@@ -239,10 +238,9 @@ class MongoClientWrapper(Generic[T]):
         exact_match: bool = False,
         language:    Optional[str] = None,
         country:     Optional[str] = None,
-        year:        Optional[int] = None,
         limit:       int = settings.MAX_RESULTS_PER_PAGE
     ) -> List[Dict]:
-        """Search for documents by title with optional filters.
+        """Search for documents by in the database title with optional filters.
 
         Args:
             title (str): The title to search for.
@@ -250,16 +248,12 @@ class MongoClientWrapper(Generic[T]):
                 Defaults to False.
             language (Optional[str], optional): Language filter. Defaults to None.
             country (Optional[str], optional): Country filter. Defaults to None.
-            year (Optional[int], optional): Year filter. Defaults to None.
             limit (int, optional): Maximum number of results to return. Defaults to settings.MAX_RESULTS_PER_PAGE.
 
         Returns:
             List[Dict]: List of matching documents.
         """
         try:
-            # Set date_field based on collection
-            date_field = "release_date" if self.collection_name == settings.MOVIES_COLLECTION else "first_air_date"
-
             base_filter = {}
             if exact_match:
                 if self.collection_name == settings.MOVIES_COLLECTION:
@@ -279,11 +273,6 @@ class MongoClientWrapper(Generic[T]):
                 base_filter["spoken_languages.name"] = language or settings.TMDB_LANGUAGE
             if country:
                 base_filter["origin_country"] = country or settings.TMDB_REGION
-            if year:
-                base_filter[date_field] = {
-                    "$gte": datetime(year, 1, 1),
-                    "$lt":  datetime(year + 1, 1, 1)
-                }
 
             match_stage = {"$match": base_filter}
             if exact_match:
@@ -340,23 +329,19 @@ class MongoClientWrapper(Generic[T]):
                 raise ValueError("Hybrid search retriever not initialized. Call initialize_indexes() first.")
 
             # Perform the hybrid search
-            results = self.retriever.get_relevant_documents(
-                query=query,
-                k=limit,
-                filter=filter_criteria
-            )
+            results = self.retriever.invoke(query)
 
             # Convert results to model instances
             documents = []
             for doc in results:
                 # Get the document data
                 doc_dict = doc.dict()
-                if hasattr(doc, 'metadata'):
-                    doc_dict.update(doc.metadata)
-                
-                # Create model instance
-                model_instance = self.model(**doc_dict)
-                documents.append(model_instance)
+                # if hasattr(doc, 'metadata'):
+                #     doc_dict.update(doc.metadata)
+                #
+                # # Create a model instance
+                # model_instance = self.model(**doc_dict)
+                documents.append(doc_dict)
 
             return documents
 
@@ -401,7 +386,7 @@ class MongoClientWrapper(Generic[T]):
         """
         vectorstore = MongoDBAtlasVectorSearch.from_connection_string(
             connection_string  = self.mongodb_uri,
-            embedding          = embedding_client.get_openai_embedding_model,
+            embedding          = embedding_client.embeddings,
             namespace          = f"{self.database_name}.{self.collection_name}",
             text_key           = text_key,
             embedding_key      = embedding_key,
