@@ -46,7 +46,7 @@ class RateLimiter:
         self._requests.clear()
     
     @classmethod
-    def from_settings(cls, settings: settings, service: str) -> 'RateLimiter':
+    def from_settings(cls, service: str) -> 'RateLimiter':
         """Create a rate limiter from settings."""
         config = RateLimitConfig(
             rate_limit=getattr(settings, f"{service.upper()}_RATE_LIMIT"),

@@ -39,7 +39,7 @@ class OpenSubtitlesClient(AbstractAPIClient):
     
     @property
     def subtitles(self) -> 'SubtitlesService':
-        """Get the subtitles service."""
+        """Get the subtitle service."""
         return self._subtitles
 
 class SearchService:
@@ -50,7 +50,7 @@ class SearchService:
     
     @staticmethod
     async def _build_params(
-            id_key:             str,
+        id_key:             str,
         id_value:           str | int,
         language:           str,
         season_number:      Optional[int],

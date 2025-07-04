@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_WAIT_MAX:       int  = 10
     OPENAI_EMBEDDING_TIMEOUT:        int  = 30
 
+    OPENAI_STT_BASE_URL:             str  = "wss://api.openai.com/v1/audio/transcriptions"
+    OPENAI_STT_MODEL:                str  = "gpt-4o-transcribe"
+
     # ============= TMDb API Configuration =============
     """TMDb API settings for movie and TV show data."""
     TMDB_BASE_URL:           str = "https://api.themoviedb.org/3"

@@ -66,10 +66,10 @@ def get_opensubtitles_client() -> OpenSubtitlesClient:
 @lru_cache()
 def get_tmdb_rate_limiter() -> RateLimiter:
     """Get a singleton rate limiter for TMDb API."""
-    return RateLimiter.from_settings(settings, "tmdb")
+    return RateLimiter.from_settings("tmdb")
 
 
 @lru_cache()
 def get_opensubtitles_rate_limiter() -> RateLimiter:
     """Get a singleton rate limiter for OpenSubtitles API."""
-    return RateLimiter.from_settings(settings, "opensubtitles")
+    return RateLimiter.from_settings("opensubtitles")

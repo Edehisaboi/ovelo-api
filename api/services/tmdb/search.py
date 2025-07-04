@@ -54,5 +54,3 @@ async def search_tv_shows(
         language=language,
         include_adult=include_adult
     )
-
-__all__ = ['search_media', 'search_movies', 'search_tv_shows']
