@@ -24,7 +24,7 @@ class TMDbService:
     ) -> SearchResults:
         """Search for movies using TMDb API."""
         try:
-            results = await self.client.search.movies(
+            return await self.client.search.movies(
                 query=query,
                 page=page,
                 language=language,
@@ -32,7 +32,6 @@ class TMDbService:
                 region=region,
                 year=year
             )
-            return results
         except Exception as e:
             logger.error(f"Error searching movies: {e}")
             raise
@@ -46,13 +45,12 @@ class TMDbService:
     ) -> SearchResults:
         """Search for TV shows using TMDb API."""
         try:
-            results = await self.client.search.tv_shows(
+            return await self.client.search.tv_shows(
                 query=query,
                 page=page,
                 language=language,
                 include_adult=include_adult
             )
-            return results
         except Exception as e:
             logger.error(f"Error searching TV shows: {e}")
             raise
@@ -62,21 +60,16 @@ class TMDbService:
         query:          str,
         page:           int = 1,
         language:       str = "en-US",
-        include_adult:  bool = True,
-        region:         Optional[str] = None,
-        year:           Optional[int] = None
+        include_adult:  bool = True
     ) -> SearchResults:
         """Search for movies, TV shows, and people using TMDb API."""
         try:
-            results = await self.client.search.multi(
+            return await self.client.search.multi(
                 query=query,
                 page=page,
                 language=language,
-                include_adult=include_adult,
-                region=region,
-                year=year
+                include_adult=include_adult
             )
-            return results
         except Exception as e:
             logger.error(f"Error performing multi-search: {e}")
             raise
@@ -87,8 +80,7 @@ class TMDbService:
     ) -> MovieDetails:
         """Get detailed movie information from TMDb API."""
         try:
-            details = await self.client.movies.details(movie_id)
-            return details
+            return await self.client.movies.details(movie_id)
         except Exception as e:
             logger.error(f"Error getting movie details: {e}")
             raise
@@ -100,11 +92,10 @@ class TMDbService:
     ) -> TVDetails:
         """Get detailed TV show information from TMDb API."""
         try:
-            details = await self.client.tv.details(
+            return await self.client.tv.details(
                 tv_id=tv_id,
                 include_seasons=include_seasons
             )
-            return details
         except Exception as e:
             logger.error(f"Error getting TV details: {e}")
             raise
@@ -112,8 +103,7 @@ class TMDbService:
     async def get_movie_credits(self, movie_id: int):
         """Get movie credits from TMDb API."""
         try:
-            credits = await self.client.movies.credits(movie_id)
-            return credits
+            return await self.client.movies.credits(movie_id)
         except Exception as e:
             logger.error(f"Error getting movie credits: {e}")
             raise
@@ -121,8 +111,7 @@ class TMDbService:
     async def get_tv_credits(self, tv_id: int):
         """Get TV show credits from TMDb API."""
         try:
-            credits = await self.client.tv.credits(tv_id)
-            return credits
+            return await self.client.tv.credits(tv_id)
         except Exception as e:
             logger.error(f"Error getting TV credits: {e}")
             raise
@@ -130,8 +119,7 @@ class TMDbService:
     async def get_movie_images(self, movie_id: int):
         """Get movie images from TMDb API."""
         try:
-            images = await self.client.movies.images(movie_id)
-            return images
+            return await self.client.movies.images(movie_id)
         except Exception as e:
             logger.error(f"Error getting movie images: {e}")
             raise
@@ -139,8 +127,7 @@ class TMDbService:
     async def get_tv_images(self, tv_id: int):
         """Get TV show images from TMDb API."""
         try:
-            images = await self.client.tv.images(tv_id)
-            return images
+            return await self.client.tv.images(tv_id)
         except Exception as e:
             logger.error(f"Error getting TV images: {e}")
             raise
@@ -148,8 +135,7 @@ class TMDbService:
     async def get_movie_videos(self, movie_id: int):
         """Get movie videos from TMDb API."""
         try:
-            videos = await self.client.movies.videos(movie_id)
-            return videos
+            return await self.client.movies.videos(movie_id)
         except Exception as e:
             logger.error(f"Error getting movie videos: {e}")
             raise
@@ -157,8 +143,7 @@ class TMDbService:
     async def get_tv_videos(self, tv_id: int):
         """Get TV show videos from TMDb API."""
         try:
-            videos = await self.client.tv.videos(tv_id)
-            return videos
+            return await self.client.tv.videos(tv_id)
         except Exception as e:
             logger.error(f"Error getting TV videos: {e}")
             raise
@@ -166,8 +151,7 @@ class TMDbService:
     async def get_movie_watch_providers(self, movie_id: int):
         """Get movie watch providers from TMDb API."""
         try:
-            providers = await self.client.movies.watch_providers(movie_id)
-            return providers
+            return await self.client.movies.watch_providers(movie_id)
         except Exception as e:
             logger.error(f"Error getting movie watch providers: {e}")
             raise
@@ -175,8 +159,7 @@ class TMDbService:
     async def get_tv_watch_providers(self, tv_id: int):
         """Get TV show watch providers from TMDb API."""
         try:
-            providers = await self.client.tv.watch_providers(tv_id)
-            return providers
+            return await self.client.tv.watch_providers(tv_id)
         except Exception as e:
             logger.error(f"Error getting TV watch providers: {e}")
             raise 
