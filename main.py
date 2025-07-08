@@ -1,16 +1,45 @@
-from fastapi import FastAPI
-from api.controllers import stt
+#!/usr/bin/env python3
+"""
+Moovzmatch - Media Identification System
 
-app = FastAPI()
+A sophisticated FastAPI-based application for movie and TV show identification
+using speech-to-text, vector embeddings, and multiple external APIs.
 
-# Include routers
-app.include_router(stt.router)
+Features:
+- Real-time speech-to-text transcription
+- Vector-based semantic search
+- TMDb API integration for media metadata
+- OpenSubtitles integration for subtitle data
+- MongoDB with vector search capabilities
+- Rate limiting and caching
+"""
 
-@app.get("/")
-async def root():
-    return {"message": "Hello World"}
+import uvicorn
+from application.core.config import settings
+from application.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
-@app.get("/hello/{name}")
-async def say_hello(name: str):
-    return {"message": f"Hello {name}"}
+def main():
+    """Main application entry point."""
+    try:
+        logger.info("Starting Moovzmatch API server...")
+        logger.info(f"Debug mode: {settings.DEBUG_MODE}")
+        logger.info(f"Log level: {settings.LOG_LEVEL}")
+        
+        uvicorn.run(
+            "application.main:application",
+            host="0.0.0.0",
+            port=8000,
+            reload=settings.DEBUG_MODE,
+            log_level=settings.LOG_LEVEL.lower()
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to start server: {e}")
+        raise
+
+
+if __name__ == "__main__":
+    main()
