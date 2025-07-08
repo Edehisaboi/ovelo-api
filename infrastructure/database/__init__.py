@@ -1,5 +1,5 @@
 from .mongodb import MongoClientWrapper
-from .queries import search_movie_by_title, search_tv_by_title
+from .queries import search_by_title, vector_search
 from .indexes import MongoIndex
 
 # Create singleton instances
@@ -32,8 +32,10 @@ def _get_tv_db():
 __all__ = [
     "MongoClientWrapper",
     "MongoIndex",
-    "search_movie_by_title",
-    "search_tv_by_title",
+
+    "search_by_title",
+    "vector_search",
+
     "_get_movie_db",
     "_get_tv_db"
 ] 

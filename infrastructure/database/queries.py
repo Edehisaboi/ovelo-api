@@ -6,81 +6,122 @@ from pymongo import errors
 from application.core import settings
 from application.core.logging import get_logger
 from infrastructure.database import MongoClientWrapper
+from application.models.media import MovieDetails, TVDetails
 
 logger = get_logger(__name__)
 
-async def search_by_title(
-    mongodb:    MongoClientWrapper,
-    title:      str,
+
+def search_by_title(
+    movie_db:   "MongoClientWrapper",
+    tv_db:      "MongoClientWrapper",
+    query:      str,
     exact_match: bool = False,
     language:   Optional[str] = None,
     country:    Optional[str] = None,
     limit:      int = settings.MAX_RESULTS_PER_PAGE
-) -> List[Dict]:
-    """Search for documents by title in the database with optional filters.
-
-    Args:
-        mongodb (MongoClientWrapper): The MongoDB client wrapper.
-        title (str): The title to search for.
-        exact_match (bool, optional): Whether to perform an exact match search.
-            Defaults to False.
-        language (Optional[str], optional): Language filter. Defaults to None.
-        country (Optional[str], optional): Country filter. Defaults to None.
-        limit (int, optional): Maximum number of results to return.
-            Defaults to settings.MAX_RESULTS_PER_PAGE.
+) -> Dict[str, List]:
+    """
+    Search both movies and TV shows collections using MongoDB's $unionWith aggregation.
 
     Returns:
-        List[Dict]: List of matching documents.
+        Dict[str, List]: Dictionary with 'movies' and 'tv_shows' keys containing MovieDetails and TVDetails objects.
     """
     try:
-        match_filter = {}
+        # Build match stages for movies and TV shows
+        movie_match = {}
+        tv_match = {}
+
         if exact_match:
-            if mongodb.collection_name == settings.MOVIES_COLLECTION:
-                match_filter["$or"] = [
-                    {"title": title},
-                    {"original_title": title}
-                ]
-            else:
-                match_filter["$or"] = [
-                    {"name": title},
-                    {"original_name": title}
-                ]
+            movie_match["$or"] = [{"title": query}, {"original_title": query}]
+            tv_match["$or"] = [{"name": query}, {"original_name": query}]
         else:
-            match_filter["$text"] = {"$search": title}
+            movie_match["$text"] = {"$search": query}
+            tv_match["$text"] = {"$search": query}
 
         if language:
-            match_filter["spoken_languages.name"] = language
+            # Use $elemMatch if spoken_languages is an array of objects
+            movie_match["spoken_languages"] = {"$elemMatch": {"name": language}}
+            tv_match["spoken_languages"] = {"$elemMatch": {"name": language}}
         if country:
-            match_filter["origin_country"] = country
+            movie_match["origin_country"] = country
+            tv_match["origin_country"] = country
 
-        match_stage = {"$match": match_filter}
-        pipeline = [match_stage]
+        # Construct the aggregation pipeline
+        pipeline = [
+            {"$match": movie_match},
+        ]
+        if not exact_match:
+            pipeline.append({"$addFields": {"score": {"$meta": "textScore"}}})
+        pipeline.append({"$addFields": {"media_type": "movie"}})
+
+        # Build sub-pipeline for TV shows
+        tv_pipeline = [
+            {"$match": tv_match},
+        ]
+        if not exact_match:
+            tv_pipeline.append({"$addFields": {"score": {"$meta": "textScore"}}})
+        tv_pipeline.append({"$addFields": {"media_type": "tv_show"}})
+
+        pipeline.append({
+            "$unionWith": {
+                "coll": tv_db.collection_name,
+                "pipeline": tv_pipeline
+            }
+        })
 
         if not exact_match:
-            sort_stage = {"$sort": {"score": {"$meta": "textScore"}}}
-            pipeline.append(sort_stage)
+            pipeline.append({"$sort": {"score": -1}})
+        else:
+            pipeline.append({
+                "$addFields": {
+                    "sort_order": {
+                        "$cond": {
+                            "if": {"$eq": ["$media_type", "movie"]},
+                            "then": 1,
+                            "else": 2
+                        }
+                    }
+                }
+            })
+            pipeline.append({"$sort": {"sort_order": 1}})
+        pipeline.append({"$limit": limit})
 
-        # Create projection using field aliases if defined
-        projection = {
-            field_info.alias or field_name: 1
-            for field_name, field_info in mongodb.model.model_fields.items()
-        }
-        if not exact_match:
-            projection["score"] = {"$meta": "textScore"}
+        # Execute the aggregation synchronously
+        results = list(movie_db.collection.aggregate(pipeline))
 
-        project_stage = {"$project": projection}
-        pipeline.append(project_stage)
+        # Separate results into movies and tv_shows
+        movies:     List[MovieDetails] = []
+        tv_shows:   List[TVDetails] = []
 
-        if limit:
-            pipeline.append({"$limit": limit})
+        for result in results:
+            result.pop("score", None)
+            result.pop("sort_order", None)
+            if result.get("media_type") == "movie":
+                # Convert to MovieDetails object
+                try:
+                    movie_details = MovieDetails(**result)
+                    movies.append(movie_details)
+                except Exception as e:
+                    logger.warning(f"Failed to convert movie result to MovieDetails: {e}")
+                    # Skip invalid results
+                    continue
+            else:
+                # Convert to TVDetails object
+                try:
+                    tv_details = TVDetails(**result)
+                    tv_shows.append(tv_details)
+                except Exception as e:
+                    logger.warning(f"Failed to convert TV result to TVDetails: {e}")
+                    # Skip invalid results
+                    continue
+        return {"movies": movies, "tv_shows": tv_shows}
 
-        return list(mongodb.collection.aggregate(pipeline))
     except errors.PyMongoError as e:
-        logger.error(f"Error searching {mongodb.collection_name} by title: {str(e)}")
+        logger.error(f"Error searching both collections: {str(e)}")
         raise
 
 
-async def vector_search(
+def vector_search(
     mongodb: MongoClientWrapper,
     query: str,
     limit: int = None,
@@ -115,7 +156,7 @@ async def vector_search(
 
         # Perform the hybrid search (invoke may be async, but often is sync. Wrap if needed.)
         # If your retriever is async, use: results = await retriever.invoke(query)
-        results = retriever.ainvoke(query)
+        results = retriever.invoke(query)
 
         # Convert results to dicts
         documents = []
