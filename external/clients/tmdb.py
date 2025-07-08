@@ -67,9 +67,7 @@ class SearchService:
         query:          str,
         page:           int = 1,
         language: str = "en-US",
-        include_adult:  bool = True,
-        region:         Optional[str] = None,
-        year:           Optional[int] = None
+        include_adult:  bool = True
     ) -> SearchResults:
         """Search for movies, TV shows, and people."""
         params = {
@@ -78,10 +76,6 @@ class SearchService:
             "language":     language,
             "include_adult":include_adult
         }
-        if region:
-            params["region"] = region
-        if year:
-            params["year"] = year
             
         data = await self._client.get("/search/multi", params)
         return SearchResults(**data)
@@ -115,7 +109,8 @@ class SearchService:
         query:          str,
         page:           int = 1,
         language:       str = "en-US",
-        include_adult:  bool = True
+        include_adult:  bool = True,
+        year:           Optional[int] = None
     ) -> SearchResults:
         """Search for TV shows."""
         params = {
@@ -124,6 +119,8 @@ class SearchService:
             "language":     language,
             "include_adult": include_adult
         }
+        if year:
+            params["year"] = year
         
         data = await self._client.get("/search/tv", params)
         return SearchResults(**data)
