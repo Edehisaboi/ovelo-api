@@ -5,7 +5,7 @@ from typing import AsyncGenerator, Optional, Callable
 import websockets
 from langchain_openai import OpenAIEmbeddings
 
-from application.core import settings
+from application.core.config import settings
 from application.core.logging import get_logger
 
 logger = get_logger(__name__)

@@ -1,88 +1,85 @@
 from functools import lru_cache
-
 import httpx
 
 from application.core.config import settings
 from external.clients import (
-    OpenSubtitlesClient, TMDbClient,
-    get_embedding_client as _get_embedding_client
+    OpenSubtitlesClient,
+    TMDbClient,
+    EmbeddingClient,
+    OpenAISTT,
+    RekognitionClient
 )
 from application.utils.rate_limiter import RateLimiter
+from infrastructure.database import tv_db, movie_db
 
-
-@lru_cache()
-def get_settings():
-    """Get a singleton setting instance."""
-    return settings
-
+# --- HTTP Client Singleton ---
 
 @lru_cache()
 def get_http_client() -> httpx.AsyncClient:
-    """Get a singleton HTTP client instance."""
+    """Return a singleton Async HTTP client instance."""
     return httpx.AsyncClient()
 
+# --- Database Wrappers ---
 
+@lru_cache()
 def get_movie_db():
-    """Get a singleton instance of the movie database wrapper."""
-    from infrastructure.database import get_movie_db
-    return get_movie_db()
+    """Return a singleton movie database wrapper instance."""
+    return movie_db()
 
-
+@lru_cache()
 def get_tv_db():
-    """Get a singleton instance of the TV database wrapper."""
-    from infrastructure.database import get_tv_db
-    return get_tv_db()
+    """Return a singleton TV database wrapper instance."""
+    return tv_db()
 
-
-@lru_cache()
-def get_embedding_client():
-    """Get a singleton EmbeddingClient instance."""
-    return _get_embedding_client()
-
+# --- Embeddings & STT Clients ---
 
 @lru_cache()
-def get_tmdb_client() -> TMDbClient:
-    """Get a singleton TMDb client instance."""
-    return TMDbClient(
-        api_key        = settings.TMDB_API_KEY,
-        http_client    = get_http_client(),
-        rate_limiter   = get_tmdb_rate_limiter(),
-        base_url       = settings.TMDB_BASE_URL
-    )
-
+def get_embedding_client() -> EmbeddingClient:
+    """Return a singleton EmbeddingClient instance."""
+    return EmbeddingClient()
 
 @lru_cache()
-def get_tmdb_service():
-    """Get a singleton TMDb service instance."""
-    from application.services.media.tmdb import TMDbService
-    return TMDbService(get_tmdb_client())
+def get_stt_client() -> OpenAISTT:
+    """Return a singleton OpenAI STT client instance."""
+    return OpenAISTT()
 
-
-@lru_cache()
-def get_opensubtitles_client() -> OpenSubtitlesClient:
-    """Get a singleton OpenSubtitles client instance."""
-    return OpenSubtitlesClient(
-        api_key        = settings.OPENSUBTITLES_API_KEY,
-        http_client    = get_http_client(),
-        rate_limiter   = get_opensubtitles_rate_limiter(),
-        base_url       = settings.OPENSUBTITLES_BASE_URL
-    )
-
+# --- TMDb Client & Rate Limiter ---
 
 @lru_cache()
 def get_tmdb_rate_limiter() -> RateLimiter:
-    """Get a singleton rate limiter for TMDb API."""
+    """Return a singleton rate limiter for TMDb API."""
     return RateLimiter.from_settings("tmdb")
 
+@lru_cache()
+def get_tmdb_client() -> TMDbClient:
+    """Return a singleton TMDb client instance."""
+    return TMDbClient(
+        api_key      = settings.TMDB_API_KEY,
+        http_client  = get_http_client(),
+        rate_limiter = get_tmdb_rate_limiter(),
+        base_url     = settings.TMDB_BASE_URL
+    )
+
+# --- OpenSubtitles Client & Rate Limiter ---
 
 @lru_cache()
 def get_opensubtitles_rate_limiter() -> RateLimiter:
-    """Get a singleton rate limiter for OpenSubtitles API."""
+    """Return a singleton rate limiter for OpenSubtitles API."""
     return RateLimiter.from_settings("opensubtitles")
 
+@lru_cache()
+def get_opensubtitles_client() -> OpenSubtitlesClient:
+    """Return a singleton OpenSubtitles client instance."""
+    return OpenSubtitlesClient(
+        api_key      = settings.OPENSUBTITLES_API_KEY,
+        http_client  = get_http_client(),
+        rate_limiter = get_opensubtitles_rate_limiter(),
+        base_url     = settings.OPENSUBTITLES_BASE_URL
+    )
+
+# --- Rekognition Client ---
 
 @lru_cache()
-def get_stt_service():
-    """Get a singleton STT service instance."""
-    from application.services.transcription.stt import STTService
-    return STTService() 
+def get_rekognition_client() -> RekognitionClient:
+    """Return a singleton Rekognition client instance."""
+    return RekognitionClient()

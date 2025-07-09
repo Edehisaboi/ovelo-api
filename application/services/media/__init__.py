@@ -1,8 +1,8 @@
 from .tmdb import TMDbService
-from application.core.dependencies import get_tmdb_client
+from application.core import tmdb_client
 
 # Create singleton instance
-tmdb_service = TMDbService(get_tmdb_client())
+tmdb_service = TMDbService(tmdb_client)
 
 __all__ = [
     "TMDbService",

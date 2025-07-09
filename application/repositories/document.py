@@ -3,7 +3,7 @@ from datetime import datetime, UTC
 from typing import Dict, Any
 
 from application.models.media import MovieDetails, TVDetails
-from application.core import settings
+from application.core.config import settings
 
 
 class DocumentBuilder(ABC):

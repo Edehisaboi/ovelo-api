@@ -13,7 +13,7 @@ from application.core.config import settings
 from application.core.logging import get_logger
 from application.models.media import MovieDetails, TVDetails
 from application.repositories.document import movie_document, tv_document
-from external.clients import get_embedding_client
+from application.core import embedding_client
 
 from .indexes import MongoIndex
 
@@ -173,7 +173,7 @@ class MongoClientWrapper(Generic[T]):
         """Get a hybrid search retriever for this collection."""
         vectorstore = MongoDBAtlasVectorSearch.from_connection_string(
             connection_string=self.mongodb_uri,
-            embedding=get_embedding_client().embeddings,
+            embedding=embedding_client.embeddings,
             namespace=f"{self.database_name}.{self.collection_name}",
             text_key=text_key,
             embedding_key=embedding_key,

@@ -1,17 +1,11 @@
 from .stt import STTService
-from application.models.stt import STTResult, STTMessageType
-from application.core.logging import get_logger
-
-logger = get_logger(__name__)
 
 # Create singleton instance
 stt_service = STTService()
 
 __all__ = [
     "stt_service",
-    "STTService",
-    "STTResult",
-    "STTMessageType"
+    "STTService"
 ]
 
 """

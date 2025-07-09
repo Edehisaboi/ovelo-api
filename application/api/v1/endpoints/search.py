@@ -3,8 +3,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from application.core import settings
-from application.core.dependencies import get_movie_db, get_tv_db
+from application.core.config import settings
+from application.core import movie_db, tv_db
 from application.core.logging import get_logger
 
 from application.models.media import MovieDetails, TVDetails, SearchResults
@@ -40,9 +40,9 @@ class SearchResponse(BaseModel):
 
 @router.post("/search", response_model=SearchResponse)
 async def search_media(
-    request: SearchRequest,
-    movie_db: MongoClientWrapper = Depends(get_movie_db),
-    tv_db: MongoClientWrapper = Depends(get_tv_db)
+    request:         SearchRequest,
+    movie_db_client: MongoClientWrapper = Depends(movie_db),
+    tv_db_client:    MongoClientWrapper = Depends(tv_db)
 ):
     """
     Search for movies and TV shows using hybrid search.
@@ -52,8 +52,8 @@ async def search_media(
 
     try:
         db_results = search_by_title(
-            movie_db=movie_db,
-            tv_db=tv_db,
+            movie_db=movie_db_client,
+            tv_db=tv_db_client,
             query=request.query,
             exact_match=request.exact_match,
             language=request.language,

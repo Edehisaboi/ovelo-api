@@ -1,16 +1,21 @@
-from external.clients import OpenSubtitlesClient
 from .processor import SubtitleProcessor
-from application.core.dependencies import get_opensubtitles_client
+from .parser import SRTParser
+from .validator import SubtitleValidator
 
 # Create singleton instance
-opensubtitles_client = get_opensubtitles_client()
 subtitle_processor = SubtitleProcessor()
+srt_parser         = SRTParser()
+subtitle_validator = SubtitleValidator()
+
 
 __all__ = [
     # Instances
-    "opensubtitles_client",
     "subtitle_processor",
+    "srt_parser",
+    "subtitle_validator",
+
     # Classes Models
-    "OpenSubtitlesClient",
-    "SubtitleProcessor"
-] 
+    "SubtitleProcessor",
+    "SRTParser",
+    "SubtitleValidator"
+]

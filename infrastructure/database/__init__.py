@@ -35,7 +35,7 @@ class DatabaseManager:
         self._lock = Lock()
         self._initialized = True
     
-    def get_movie_db(self) -> MongoClientWrapper:
+    def movie_db(self) -> MongoClientWrapper:
         """Get a singleton instance of the movie database wrapper."""
         if self._movie_db is None:
             with self._lock:
@@ -55,7 +55,7 @@ class DatabaseManager:
                         raise
         return self._movie_db
     
-    def get_tv_db(self) -> MongoClientWrapper:
+    def tv_db(self) -> MongoClientWrapper:
         """Get a singleton instance of the TV database wrapper."""
         if self._tv_db is None:
             with self._lock:
@@ -99,13 +99,13 @@ class DatabaseManager:
 # Global database manager instance
 _db_manager = DatabaseManager()
 
-def get_movie_db() -> MongoClientWrapper:
+def movie_db() -> MongoClientWrapper:
     """Get a singleton instance of the movie database wrapper."""
-    return _db_manager.get_movie_db()
+    return _db_manager.movie_db()
 
-def get_tv_db() -> MongoClientWrapper:
+def tv_db() -> MongoClientWrapper:
     """Get a singleton instance of the TV database wrapper."""
-    return _db_manager.get_tv_db()
+    return _db_manager.tv_db()
 
 def close_database_connections():
     """Close all database connections. Useful for cleanup."""
@@ -118,8 +118,8 @@ __all__ = [
     "search_by_title",
     "vector_search",
 
-    "get_movie_db",
-    "get_tv_db",
+    "movie_db",
+    "tv_db",
 
     "close_database_connections",
     "DatabaseManager"

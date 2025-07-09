@@ -5,7 +5,7 @@ from pymongo import errors
 
 from langchain_core.documents import Document
 
-from application.core import settings
+from application.core.config import settings
 from application.core.logging import get_logger
 from infrastructure.database import MongoClientWrapper
 from application.models.media import MovieDetails, TVDetails

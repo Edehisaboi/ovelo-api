@@ -1,65 +1,46 @@
-from .config import Settings
+from dotenv import load_dotenv
+load_dotenv()
+
 from .logging import get_logger
 from .dependencies import (
-    get_settings,
-    get_http_client,
     get_movie_db,
     get_tv_db,
     get_embedding_client,
     get_tmdb_client,
     get_opensubtitles_client,
-    get_tmdb_rate_limiter,
-    get_opensubtitles_rate_limiter,
-    get_stt_service,
+    get_stt_client,
+    get_rekognition_client
 )
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# Create singleton instances
-settings = get_settings()
-http_client = get_http_client()
-movie_db = get_movie_db()
-tv_db = get_tv_db()
-embedding_client = get_embedding_client()
-tmdb_client = get_tmdb_client()
-# tmdb_service = get_tmdb_service()
+# Singleton instances for application-wide use
+movie_db             = get_movie_db()
+tv_db                = get_tv_db()
+embedding_client     = get_embedding_client()
+stt_client           = get_stt_client()
+tmdb_client          = get_tmdb_client()
 opensubtitles_client = get_opensubtitles_client()
-tmdb_rate_limiter = get_tmdb_rate_limiter()
-opensubtitles_rate_limiter = get_opensubtitles_rate_limiter()
-stt_service = get_stt_service()
+rekognition_client   = get_rekognition_client()
 
 __all__ = [
-    # Settings
-    'settings',
-    'Settings',
-    # Core instances
-    'http_client',
-    'movie_db',
-    'tv_db',
-    'embedding_client',
-    # API clients
-    'tmdb_client',
-    #'tmdb_service',
-    'opensubtitles_client',
-    # Rate limiters
-    'tmdb_rate_limiter',
-    'opensubtitles_rate_limiter',
-    # Services
-    'stt_service',
-    # Dependencies
-    'get_settings',
-    'get_http_client',
-    'get_movie_db',
-    'get_tv_db',
-    'get_embedding_client',
-    'get_tmdb_client',
-    #'get_tmdb_service',
-    'get_opensubtitles_client',
-    'get_tmdb_rate_limiter',
-    'get_opensubtitles_rate_limiter',
-    'get_stt_service',
+    # Database Wrappers
+    "movie_db",
+    "tv_db",
+
+    # Embeddings
+    "embedding_client",
+
+    # STT Client
+    "stt_client",
+
+    # TMDb
+    "tmdb_client",
+
+    # OpenSubtitles
+    "opensubtitles_client",
+
+    # Rekognition
+    "rekognition_client",
+
     # Logging
-    'get_logger'
-] 
+    "get_logger",
+]
