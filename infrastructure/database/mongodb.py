@@ -1,4 +1,4 @@
-from typing import Generic, Type, TypeVar, Optional
+from typing import Generic, Type, TypeVar
 
 from bson import ObjectId
 from pydantic import BaseModel
@@ -6,11 +6,12 @@ from pymongo import MongoClient, errors
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
+from .indexes import MongoIndex
 from application.core.config import settings
 from application.core.logging import get_logger
-from external.clients import embedding_client
-from .indexes import MongoIndex
+from external.clients import get_embedding_client
 from application.repositories.document import movie_document, tv_document
+from application.models.media import MovieDetails, TVDetails
 
 logger = get_logger(__name__)
 T      = TypeVar("T", bound=BaseModel)
@@ -63,12 +64,20 @@ class MongoClientWrapper(Generic[T]):
         self.database_name   = database_name
         self.mongodb_uri     = mongodb_uri
         self.retriever       = None
+        self._is_closed      = False
 
         try:
-            self.client = MongoClient(mongodb_uri, appname="moovzmatch")
+            self.client = MongoClient(
+                mongodb_uri, 
+                appname="moovzmatch",
+                serverSelectionTimeoutMS=5000,  # 5 second timeout
+                connectTimeoutMS=5000,
+                socketTimeoutMS=5000
+            )
+            # Test the connection
             self.client.admin.command("ping")
         except Exception as e:
-            logger.error(f"Failed to initialize MongoDBService: {e}")
+            logger.error(f"Failed to initialize MongoDB connection: {e}")
             raise
 
         self.database   = self.client[database_name]
@@ -177,9 +186,15 @@ class MongoClientWrapper(Generic[T]):
 
             # Use appropriate document builder based on collection
             if self.collection_name == settings.MOVIES_COLLECTION:
-                doc_dict = movie_document.build(document)
+                if isinstance(document, MovieDetails):
+                    doc_dict = movie_document.build(document)
+                else:
+                    doc_dict = document.model_dump()
             elif self.collection_name == settings.TV_COLLECTION:
-                doc_dict = tv_document.build(document)
+                if isinstance(document, TVDetails):
+                    doc_dict = tv_document.build(document)
+                else:
+                    doc_dict = document.model_dump()
             else:
                 doc_dict = document.model_dump()
 
@@ -212,9 +227,15 @@ class MongoClientWrapper(Generic[T]):
 
             # Use appropriate document builder based on collection
             if self.collection_name == settings.MOVIES_COLLECTION:
-                doc_dict = movie_document.build(document)
+                if isinstance(document, MovieDetails):
+                    doc_dict = movie_document.build(document)
+                else:
+                    doc_dict = document.model_dump()
             elif self.collection_name == settings.TV_COLLECTION:
-                doc_dict = tv_document.build(document)
+                if isinstance(document, TVDetails):
+                    doc_dict = tv_document.build(document)
+                else:
+                    doc_dict = document.model_dump()
             else:
                 doc_dict = document.model_dump()
 
@@ -271,7 +292,7 @@ class MongoClientWrapper(Generic[T]):
         """
         vectorstore = MongoDBAtlasVectorSearch.from_connection_string(
             connection_string  = self.mongodb_uri,
-            embedding          = embedding_client.embeddings,
+            embedding          = get_embedding_client().embeddings,
             namespace          = f"{self.database_name}.{self.collection_name}",
             text_key           = text_key,
             embedding_key      = embedding_key,
@@ -292,5 +313,24 @@ class MongoClientWrapper(Generic[T]):
         This method should be called when the service is no longer needed
         to properly release resources, unless using the context manager.
         """
-        self.client.close()
-        logger.debug("Closed MongoDB connection.") 
+        if not self._is_closed:
+            try:
+                self.client.close()
+                self._is_closed = True
+                logger.debug("Closed MongoDB connection.")
+            except Exception as e:
+                logger.error(f"Error closing MongoDB connection: {e}")
+    
+    def is_connected(self) -> bool:
+        """Check if the MongoDB connection is still active.
+        
+        Returns:
+            bool: True if connected, False otherwise.
+        """
+        if self._is_closed:
+            return False
+        try:
+            self.client.admin.command("ping")
+            return True
+        except Exception:
+            return False 

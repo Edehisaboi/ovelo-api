@@ -24,7 +24,7 @@ movie_db = get_movie_db()
 tv_db = get_tv_db()
 embedding_client = get_embedding_client()
 tmdb_client = get_tmdb_client()
-tmdb_service = get_tmdb_service()
+# tmdb_service = get_tmdb_service()
 opensubtitles_client = get_opensubtitles_client()
 tmdb_rate_limiter = get_tmdb_rate_limiter()
 opensubtitles_rate_limiter = get_opensubtitles_rate_limiter()
@@ -41,7 +41,7 @@ __all__ = [
     'embedding_client',
     # API clients
     'tmdb_client',
-    'tmdb_service',
+    #'tmdb_service',
     'opensubtitles_client',
     # Rate limiters
     'tmdb_rate_limiter',
@@ -55,7 +55,7 @@ __all__ = [
     'get_tv_db',
     'get_embedding_client',
     'get_tmdb_client',
-    'get_tmdb_service',
+    #'get_tmdb_service',
     'get_opensubtitles_client',
     'get_tmdb_rate_limiter',
     'get_opensubtitles_rate_limiter',

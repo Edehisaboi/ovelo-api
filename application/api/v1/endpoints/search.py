@@ -1,18 +1,21 @@
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from application.core.dependencies import get_movie_db, get_tv_db
-from infrastructure.database.mongodb import MongoClientWrapper
 from application.core import settings
-from application.models.media import MovieDetails, TVDetails, SearchResults
+from application.core.dependencies import get_movie_db, get_tv_db
 from application.core.logging import get_logger
-from infrastructure.database.queries import search_by_title
+
+from application.models.media import MovieDetails, TVDetails, SearchResults
 from application.services.media import tmdb_service
 
-logger = get_logger(__name__)
+from infrastructure.database.mongodb import MongoClientWrapper
+from infrastructure.database.queries import search_by_title
 
 router = APIRouter()
+
+logger = get_logger(__name__)
 
 
 class SearchRequest(BaseModel):
@@ -62,8 +65,8 @@ async def search_media(
         raise HTTPException(status_code=500, detail="Database search failed.")
 
     total_db_results = (
-        len(db_results.get("movies", [])) +
-        len(db_results.get("tv_shows", []))
+        len(db_results["movies"]) +
+        len(db_results["tv_shows"])
         if db_results else 0
     )
 
@@ -73,6 +76,7 @@ async def search_media(
             tmdb_results: Optional[SearchResults] = None
 
             if request.include_movies and request.include_tv:
+                # Will include media_type 'People' as per TMDb's multi-search capabilities
                 tmdb_results = await tmdb_service.search_multi(request.query)
             elif request.include_movies:
                 tmdb_results = await tmdb_service.search_movies(
@@ -91,8 +95,8 @@ async def search_media(
             # Compose empty or partial DB results, but always provide query and total_results for consistency
             return SearchResponse(
                 query=request.query,
-                movies=db_results.get("movies", []) if db_results else [],
-                tv_shows=db_results.get("tv_shows", []) if db_results else [],
+                movies=db_results["movies"],
+                tv_shows=db_results["tv_shows"],
                 tmdb_search=tmdb_results,
                 total_results=len(tmdb_results.results),
             )
@@ -103,8 +107,8 @@ async def search_media(
     # Database results are sufficient
     return SearchResponse(
         query=request.query,
-        movies=db_results.get("movies", []),
-        tv_shows=db_results.get("tv_shows", []),
+        movies=db_results["movies"],
+        tv_shows=db_results["tv_shows"],
         tmdb_search=None,
         total_results=total_db_results
     )

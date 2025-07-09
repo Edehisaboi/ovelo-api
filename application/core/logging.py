@@ -12,8 +12,21 @@ def setup_logging():
     log_file = log_dir / settings.LOG_FILE
 
     logger.remove()
-    logger.add(log_file, rotation=settings.LOG_MAX_BYTES, retention=settings.LOG_BACKUP_COUNT, level=settings.LOG_LEVEL, format=settings.LOG_FORMAT, encoding='utf-8')
-    logger.add(lambda msg: print(msg, end=''), level=settings.LOG_LEVEL, format='%(levelname)s - %(message)s')
+    # Use loguru format syntax for file logging
+    logger.add(
+        log_file, 
+        rotation=settings.LOG_MAX_BYTES, 
+        retention=settings.LOG_BACKUP_COUNT, 
+        level=settings.LOG_LEVEL, 
+        format="{time:YYYY-MM-DD HH:mm:ss} - {name} - {level} - {message}", 
+        encoding='utf-8'
+    )
+    # Use loguru format syntax for console output
+    logger.add(
+        lambda msg: print(msg, end=''), 
+        level=settings.LOG_LEVEL, 
+        format="{time:HH:mm:ss} - {level} - {message}"
+    )
     return logger
 
 def get_logger(name: str):

@@ -1,9 +1,9 @@
 from typing import List, Dict
 
-from external.clients import EmbeddingClient
+from external.clients.openai import EmbeddingClient
 from application.models.media import TranscriptChunk
 from application.core.logging import get_logger
-from external.clients import embedding_client
+from external.clients import get_embedding_client
 
 logger = get_logger(__name__)
 
@@ -11,8 +11,8 @@ logger = get_logger(__name__)
 class EmbeddingService:
     """Service for handling text embeddings and transcript processing."""
 
-    def __init__(self, client: EmbeddingClient = None):
-        self.client = client or embedding_client
+    def __init__(self, client: EmbeddingClient = get_embedding_client()):
+        self.client = client
 
     async def get_embedding(self, text: str) -> List[float]:
         """Generate embedding for a single text"""

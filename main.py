@@ -29,7 +29,7 @@ def main():
         logger.info(f"Log level: {settings.LOG_LEVEL}")
         
         uvicorn.run(
-            "application.main:application",
+            "application.app:application",
             host="0.0.0.0",
             port=8000,
             reload=settings.DEBUG_MODE,

@@ -3,10 +3,9 @@ from functools import lru_cache
 import httpx
 
 from application.core.config import settings
-from infrastructure.database.mongodb import MongoClientWrapper
 from external.clients import (
-    EmbeddingClient, OpenSubtitlesClient, TMDbClient,
-    embedding_client
+    OpenSubtitlesClient, TMDbClient,
+    get_embedding_client as _get_embedding_client
 )
 from application.utils.rate_limiter import RateLimiter
 
@@ -23,24 +22,22 @@ def get_http_client() -> httpx.AsyncClient:
     return httpx.AsyncClient()
 
 
-@lru_cache()
-def get_movie_db() -> MongoClientWrapper:
+def get_movie_db():
     """Get a singleton instance of the movie database wrapper."""
-    from infrastructure.database import _get_movie_db
-    return _get_movie_db()
+    from infrastructure.database import get_movie_db
+    return get_movie_db()
 
 
-@lru_cache()
-def get_tv_db() -> MongoClientWrapper:
+def get_tv_db():
     """Get a singleton instance of the TV database wrapper."""
-    from infrastructure.database import _get_tv_db
-    return _get_tv_db()
+    from infrastructure.database import get_tv_db
+    return get_tv_db()
 
 
 @lru_cache()
-def get_embedding_client() -> EmbeddingClient:
+def get_embedding_client():
     """Get a singleton EmbeddingClient instance."""
-    return embedding_client
+    return _get_embedding_client()
 
 
 @lru_cache()

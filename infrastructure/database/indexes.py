@@ -49,13 +49,13 @@ class MongoIndex:
             # Create traditional indexes
             self._create_traditional_indexes()
 
-            # Create vector search indexes if hybrid search is enabled
-            if is_hybrid:
-                self._create_vector_search_indexes(
-                    embedding_dim=embedding_dim,
-                    index_name=index_name,
-                    text_field=text_field
-                )
+            # Vector search index creation is skipped (Atlas only)
+            # if is_hybrid:
+            #     self._create_vector_search_indexes(
+            #         embedding_dim=embedding_dim,
+            #         index_name=index_name,
+            #         text_field=text_field
+            #     )
 
             logger.info(f"Successfully created indexes for {self.collection_type} collection")
 
@@ -135,8 +135,8 @@ class MongoIndex:
 
             # Create the search index
             self.collection.create_search_index(
-                index_name,
-                search_index_definition
+                definition=search_index_definition,
+                name=index_name
             )
             logger.debug(f"Created vector search index '{index_name}' for {self.collection_type}")
 

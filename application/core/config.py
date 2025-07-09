@@ -49,7 +49,7 @@ class Settings(BaseSettings):
 
     # ============= MongoDB Configuration =============
     """MongoDB database connection and collection settings."""
-    MONGODB_URL:             str = "mongodb://localhost:27017"
+    MONGODB_URL:             str
     MONGODB_DB:              str = "moovzmatch"
     MOVIES_COLLECTION:       str = "movies"
     TV_COLLECTION:           str = "tv_shows"
@@ -127,4 +127,4 @@ class Settings(BaseSettings):
 
 
 # Create singleton instance
-settings = Settings() 
+settings = Settings()

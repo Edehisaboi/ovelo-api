@@ -124,7 +124,7 @@ def search_by_title(
 def vector_search(
     mongodb: MongoClientWrapper,
     query: str,
-    limit: int = None,
+    limit: int = settings.MAX_RESULTS_PER_PAGE,
     filter_criteria: Optional[Dict] = None
 ) -> List[Dict]:
     """
@@ -163,9 +163,9 @@ def vector_search(
         for doc in results:
             # LangChain returns Document or BaseModel objects; .dict() or .to_dict() often available
             if hasattr(doc, "dict"):
-                doc_dict = doc.dict()
-            elif hasattr(doc, "to_dict"):
-                doc_dict = doc.to_dict()
+                doc_dict = doc.model_dump()
+            elif hasattr(doc, "model_dump"):
+                doc_dict = doc.model_dump()
             else:
                 doc_dict = dict(doc)
             documents.append(doc_dict)

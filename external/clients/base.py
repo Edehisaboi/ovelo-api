@@ -1,7 +1,7 @@
-import httpx
-
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
+
+import httpx
 
 from application.utils.rate_limiter import RateLimiter
 

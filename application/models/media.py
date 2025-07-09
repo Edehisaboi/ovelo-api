@@ -10,9 +10,9 @@ class SearchResult(BaseModel):
     overview:       str
     poster_path:    Optional[str] = None
     backdrop_path:  Optional[str] = None
-    media_type:     str
-    release_date:   Optional[date] = None  # For movies
-    first_air_date: Optional[date] = None  # For TV shows
+    media_type:     Optional[str] = None  # it's only provided for multi-search results
+    release_date:   Optional[date | str] = None  # For movies
+    first_air_date: Optional[date | str] = None  # For TV shows
     vote_average:   float
     vote_count:     int
 

@@ -1,33 +1,115 @@
+from typing import Optional
+from threading import Lock
+
 from .mongodb import MongoClientWrapper
 from .queries import search_by_title, vector_search
 from .indexes import MongoIndex
 
-# Create singleton instances
+# Create singleton instances with thread safety
 from application.models.media import MovieDetails, TVDetails
 from application.core.config import settings
+from application.core.logging import get_logger
 
-movie_db = None
-tv_db = None
+logger = get_logger(__name__)
 
-def _get_movie_db():
-    global movie_db
-    if movie_db is None:
-        from infrastructure.database.mongodb import MongoClientWrapper
-        movie_db = MongoClientWrapper(
-            model=MovieDetails,
-            collection_name=settings.MOVIES_COLLECTION
-        )
-    return movie_db
+class DatabaseManager:
+    """Thread-safe singleton manager for database connections."""
+    
+    _instance: Optional['DatabaseManager'] = None
+    _lock = Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        if self._initialized:
+            return
+            
+        self._movie_db: Optional[MongoClientWrapper] = None
+        self._tv_db: Optional[MongoClientWrapper] = None
+        self._lock = Lock()
+        self._initialized = True
+    
+    def get_movie_db(self) -> MongoClientWrapper:
+        """Get a singleton instance of the movie database wrapper."""
+        if self._movie_db is None:
+            with self._lock:
+                if self._movie_db is None:
+                    try:
+                        self._movie_db = MongoClientWrapper(
+                            model=MovieDetails,
+                            collection_name=settings.MOVIES_COLLECTION,
+                            database_name=settings.MONGODB_DB,
+                            mongodb_uri=settings.MONGODB_URL
+                        )
+                        # Initialize indexes for the collection
+                        self._movie_db.initialize_indexes()
+                        logger.info("Movie database connection initialized with indexes")
+                    except Exception as e:
+                        logger.error(f"Failed to initialize movie database: {e}")
+                        raise
+        return self._movie_db
+    
+    def get_tv_db(self) -> MongoClientWrapper:
+        """Get a singleton instance of the TV database wrapper."""
+        if self._tv_db is None:
+            with self._lock:
+                if self._tv_db is None:
+                    try:
+                        self._tv_db = MongoClientWrapper(
+                            model=TVDetails,
+                            collection_name=settings.TV_COLLECTION,
+                            database_name=settings.MONGODB_DB,
+                            mongodb_uri=settings.MONGODB_URL
+                        )
+                        # Initialize indexes for the collection
+                        self._tv_db.initialize_indexes()
+                        logger.info("TV database connection initialized with indexes")
+                    except Exception as e:
+                        logger.error(f"Failed to initialize TV database: {e}")
+                        raise
+        return self._tv_db
+    
+    def close_all(self):
+        """Close all database connections."""
+        with self._lock:
+            if self._movie_db:
+                try:
+                    self._movie_db.close()
+                    logger.info("Movie database connection closed")
+                except Exception as e:
+                    logger.error(f"Error closing movie database: {e}")
+                finally:
+                    self._movie_db = None
+            
+            if self._tv_db:
+                try:
+                    self._tv_db.close()
+                    logger.info("TV database connection closed")
+                except Exception as e:
+                    logger.error(f"Error closing TV database: {e}")
+                finally:
+                    self._tv_db = None
 
-def _get_tv_db():
-    global tv_db
-    if tv_db is None:
-        from infrastructure.database.mongodb import MongoClientWrapper
-        tv_db = MongoClientWrapper(
-            model=TVDetails,
-            collection_name=settings.TV_COLLECTION
-        )
-    return tv_db
+# Global database manager instance
+_db_manager = DatabaseManager()
+
+def get_movie_db() -> MongoClientWrapper:
+    """Get a singleton instance of the movie database wrapper."""
+    return _db_manager.get_movie_db()
+
+def get_tv_db() -> MongoClientWrapper:
+    """Get a singleton instance of the TV database wrapper."""
+    return _db_manager.get_tv_db()
+
+def close_database_connections():
+    """Close all database connections. Useful for cleanup."""
+    _db_manager.close_all()
 
 __all__ = [
     "MongoClientWrapper",
@@ -36,6 +118,9 @@ __all__ = [
     "search_by_title",
     "vector_search",
 
-    "_get_movie_db",
-    "_get_tv_db"
+    "get_movie_db",
+    "get_tv_db",
+
+    "close_database_connections",
+    "DatabaseManager"
 ] 

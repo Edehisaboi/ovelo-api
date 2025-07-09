@@ -1,14 +1,21 @@
 from .opensubtitles import OpenSubtitlesClient
 from .tmdb import TMDbClient
-from .openai import EmbeddingClient
 
-embedding_client = EmbeddingClient()
+# Lazy-loaded embedding client to avoid circular imports
+_embedding_client = None
+
+def get_embedding_client():
+    """Get a singleton instance of the embedding client."""
+    global _embedding_client
+    if _embedding_client is None:
+        from .openai import EmbeddingClient
+        _embedding_client = EmbeddingClient()
+    return _embedding_client
 
 __all__ = [
     # Classes
     "OpenSubtitlesClient",
-    "TMDbClient",
-    "EmbeddingClient",
-    # Instances
-    "embedding_client"
+    "TMDbClient", 
+    # Functions
+    "get_embedding_client"
 ] 
