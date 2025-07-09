@@ -1,7 +1,10 @@
 from typing import List, Dict, Any
 
+from pymongo.collection import Collection
 from pymongo import ASCENDING, TEXT, IndexModel
 from pymongo.errors import OperationFailure
+
+from langchain_mongodb.index import create_fulltext_search_index
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
 from application.core.config import settings
@@ -16,15 +19,16 @@ class MongoIndex:
     def __init__(
         self,
         retriever: MongoDBAtlasHybridSearchRetriever,
-        collection,
+        collection: Collection,
         collection_type: str
     ):
-        """Initialize the index manager.
+        """
+        Initialize the index manager.
 
         Args:
             retriever: Hybrid search retriever instance.
             collection: MongoDB collection instance.
-            collection_type: Type of collection (movies or tv_shows).
+            collection_type: Type of collection (e.g., movies, tv_shows).
         """
         self.retriever = retriever
         self.collection = collection
@@ -33,45 +37,33 @@ class MongoIndex:
     def create(
         self,
         embedding_dim: int,
-        index_name: str,
-        text_field: str,
         is_hybrid: bool = True
     ) -> None:
-        """Create indexes for the collection.
+        """
+        Create all relevant indexes for the collection.
 
         Args:
             embedding_dim: Dimension of the embedding vectors.
-            index_name: Name of the search index.
-            text_field: Field to use for text search.
             is_hybrid: Whether to create hybrid search indexes.
         """
         try:
-            # Create traditional indexes
             self._create_traditional_indexes()
-
-            # Vector search index creation is skipped (Atlas only)
-            # if is_hybrid:
-            #     self._create_vector_search_indexes(
-            #         embedding_dim=embedding_dim,
-            #         index_name=index_name,
-            #         text_field=text_field
-            #     )
-
-            logger.info(f"Successfully created indexes for {self.collection_type} collection")
-
+            self._create_vector_search_indexes(embedding_dim, is_hybrid)
+            logger.info(f"Successfully created indexes for '{self.collection_type}' collection.")
         except Exception as e:
-            logger.error(f"Error creating indexes for {self.collection_type}: {e}")
+            logger.error(f"Error creating indexes for '{self.collection_type}': {e}")
             raise
 
     def _create_traditional_indexes(self) -> None:
-        """Create traditional MongoDB indexes for efficient querying."""
+        """
+        Create traditional MongoDB indexes for efficient querying and search.
+        """
         try:
-            # Text index for full-text search
-            text_index = IndexModel([("title", TEXT), ("overview", TEXT)], name="text_search")
-            
-            # Single field indexes for common queries
+            text_index = IndexModel(
+                [("title", TEXT)], name="text_search"
+            )
             indexes = [
-                IndexModel([("tmdb_id", ASCENDING)], unique=True, name="tmdb_id_unique"),
+                IndexModel([("id", ASCENDING)], unique=True, name="tmdb_id_unique"),
                 IndexModel([("title", ASCENDING)], name="title_index"),
                 IndexModel([("release_date", ASCENDING)], name="release_date_index"),
                 IndexModel([("vote_average", ASCENDING)], name="vote_average_index"),
@@ -80,27 +72,22 @@ class MongoIndex:
                 IndexModel([("genres.name", ASCENDING)], name="genres_index"),
                 IndexModel([("spoken_languages.name", ASCENDING)], name="languages_index"),
                 IndexModel([("origin_country", ASCENDING)], name="country_index"),
-                text_index
+                text_index,
             ]
-
-            # Add TV-specific indexes
+            # TV-specific indexes
             if self.collection_type == settings.TV_COLLECTION:
-                tv_indexes = [
+                indexes += [
                     IndexModel([("name", ASCENDING)], name="name_index"),
                     IndexModel([("first_air_date", ASCENDING)], name="first_air_date_index"),
                     IndexModel([("last_air_date", ASCENDING)], name="last_air_date_index"),
                     IndexModel([("number_of_seasons", ASCENDING)], name="seasons_index"),
                     IndexModel([("number_of_episodes", ASCENDING)], name="episodes_index"),
                 ]
-                indexes.extend(tv_indexes)
-
-            # Create indexes
             self.collection.create_indexes(indexes)
-            logger.debug(f"Created traditional indexes for {self.collection_type}")
-
+            logger.debug(f"Created traditional indexes for '{self.collection_type}' collection.")
         except OperationFailure as e:
             if "already exists" in str(e):
-                logger.info(f"Traditional indexes already exist for {self.collection_type}")
+                logger.info(f"Traditional indexes already exist for '{self.collection_type}'.")
             else:
                 logger.error(f"Error creating traditional indexes: {e}")
                 raise
@@ -111,38 +98,26 @@ class MongoIndex:
     def _create_vector_search_indexes(
         self,
         embedding_dim: int,
-        index_name: str,
-        text_field: str
+        is_hybrid: bool = True
     ) -> None:
-        """Create vector search indexes for semantic search."""
+        """
+        Create vector search (semantic search) and hybrid indexes.
+        """
         try:
-            # Define the search index configuration
-            search_index_definition = {
-                "mappings": {
-                    "dynamic": True,
-                    "fields": {
-                        "embedding": {
-                            "dimensions": embedding_dim,
-                            "similarity": "cosine",
-                            "type": "knnVector"
-                        },
-                        text_field: {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-
-            # Create the search index
-            self.collection.create_search_index(
-                definition=search_index_definition,
-                name=index_name
-            )
-            logger.debug(f"Created vector search index '{index_name}' for {self.collection_type}")
-
+            vectorstore = self.retriever.vectorstore
+            if not vectorstore:
+                raise ValueError("Vectorstore is not initialized.")
+            vectorstore.create_vector_search_index(dimensions=embedding_dim)
+            if is_hybrid:
+                create_fulltext_search_index(
+                    collection=self.collection,
+                    index_name=self.retriever.search_index_name,
+                    field=vectorstore._text_key
+                )
+            logger.debug(f"Created vector/hybrid search indexes for '{self.collection_type}'.")
         except OperationFailure as e:
             if "already exists" in str(e):
-                logger.info(f"Vector search index '{index_name}' already exists for {self.collection_type}")
+                logger.info(f"Vector search index already exists for '{self.collection_type}'.")
             else:
                 logger.error(f"Error creating vector search index: {e}")
                 raise
@@ -151,37 +126,41 @@ class MongoIndex:
             raise
 
     def list_indexes(self) -> List[Dict[str, Any]]:
-        """List all indexes for the collection.
+        """
+        List all indexes for the collection.
 
         Returns:
-            List[Dict[str, Any]]: List of index information.
+            A list of index information dicts.
         """
         try:
             indexes = list(self.collection.list_indexes())
-            logger.debug(f"Found {len(indexes)} indexes for {self.collection_type}")
+            logger.debug(f"Found {len(indexes)} indexes for '{self.collection_type}'.")
             return indexes
         except Exception as e:
             logger.error(f"Error listing indexes: {e}")
             raise
 
     def drop_index(self, index_name: str) -> None:
-        """Drop a specific index.
+        """
+        Drop a specific index by name.
 
         Args:
-            index_name: Name of the index to drop.
+            index_name: The name of the index to drop.
         """
         try:
             self.collection.drop_index(index_name)
-            logger.info(f"Dropped index '{index_name}' from {self.collection_type}")
+            logger.info(f"Dropped index '{index_name}' from '{self.collection_type}'.")
         except Exception as e:
             logger.error(f"Error dropping index '{index_name}': {e}")
             raise
 
     def drop_all_indexes(self) -> None:
-        """Drop all indexes except the default _id index."""
+        """
+        Drop all indexes except the default _id index.
+        """
         try:
             self.collection.drop_indexes()
-            logger.info(f"Dropped all indexes from {self.collection_type}")
+            logger.info(f"Dropped all indexes from '{self.collection_type}'.")
         except Exception as e:
             logger.error(f"Error dropping all indexes: {e}")
-            raise 
+            raise
