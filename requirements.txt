@@ -19,3 +19,4 @@ loguru~=0.7.3
 websockets~=15.0.1
 uvicorn~=0.34.2
 sounddevice~=0.5.2
+langchain-core~=0.3.62

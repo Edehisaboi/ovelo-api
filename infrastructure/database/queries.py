@@ -1,7 +1,9 @@
 from __future__ import annotations
-from typing import List, Dict, Optional
+from typing import List, Dict, Tuple, Optional, Union
 
 from pymongo import errors
+
+from langchain_core.documents import Document
 
 from application.core import settings
 from application.core.logging import get_logger
@@ -120,55 +122,43 @@ def search_by_title(
         logger.error(f"Error searching both collections: {str(e)}")
         raise
 
-
 def vector_search(
-    mongodb: MongoClientWrapper,
+    mongodb: "MongoClientWrapper",
     query: str,
     limit: int = settings.MAX_RESULTS_PER_PAGE,
     filter_criteria: Optional[Dict] = None
-) -> List[Dict]:
+) -> Union[List[Tuple[Document, float]], List[Document]]:
     """
-    Perform a hybrid vector ++ text search using the collection's hybrid retriever.
+    Perform a hybrid vector and text search using the collection's hybrid retriever.
 
     Args:
         mongodb (MongoClientWrapper): The MongoDB client wrapper, with initialized retriever.
         query (str): The search query.
-        limit (int, optional): Max number of results to return. Uses retriever's default if None.
-        filter_criteria (dict, optional): Additional filter. Not all retrievers support this.
+        limit (int, optional): Max number of results to return.
+        filter_criteria (dict, optional): MongoDB pre_filter for vector search (if supported).
 
     Returns:
-        List[Dict]: List of result documents with relevance scores (if present).
+        Union[List[Tuple[Document, float]], List[Document]]:
+            - List of (Document, score) tuples if using similarity_search_with_score.
+            - List of Document if using retriever.invoke.
     """
     try:
-        # Ensure retriever is initialized
-        if not hasattr(mongodb, "retriever") or not mongodb.retriever:
+        if not mongodb.retriever:
             raise ValueError("Hybrid search retriever not initialized. Call initialize_indexes() first.")
 
-        # Update top_k if limit is provided and supported
         retriever = mongodb.retriever
-        if limit is not None and hasattr(retriever, "top_k"):
-            retriever.top_k = limit
+        vectorstore = retriever.vectorstore
 
-        # LangChain's MongoDBAtlasHybridSearchRetriever does not (as of mid-2024) natively support extra filter_criteria.
-        # If filter_criteria are required and retriever supports it, pass it. Else, log and skip.
-        if filter_criteria:
-            logger.warning("filter_criteria not applied: current retriever does not support filter params. Skipping filters.")
-
-        # Perform the hybrid search (invoke may be async, but often is sync. Wrap if needed.)
-        # If your retriever is async, use: results = await retriever.invoke(query)
-        results = retriever.invoke(query)
-
-        # Convert results to dicts
-        documents = []
-        for doc in results:
-            # LangChain returns Document or BaseModel objects; .dict() or .to_dict() often available
-            if hasattr(doc, "dict"):
-                doc_dict = doc.model_dump()
-            elif hasattr(doc, "model_dump"):
-                doc_dict = doc.model_dump()
-            else:
-                doc_dict = dict(doc)
-            documents.append(doc_dict)
+        if vectorstore:
+            # Returns List[Tuple[Document, float]]
+            documents = vectorstore.similarity_search_with_score(
+                query=query,
+                k=limit,
+                pre_filter=filter_criteria
+            )
+        else:
+            # Returns List[Document]
+            documents = retriever.invoke(query)
 
         return documents
 
