@@ -7,7 +7,7 @@ from application.core.config import settings
 from application.core.resources import movie_db, tv_db
 from application.core.logging import get_logger
 
-from application.models.media import MovieDetails, TVDetails, SearchResults
+from application.models import MovieDetails, TVDetails, SearchResults
 from application.services.media import tmdb_service
 
 from infrastructure.database.mongodb import MongoClientWrapper
