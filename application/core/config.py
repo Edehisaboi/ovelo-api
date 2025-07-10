@@ -43,9 +43,9 @@ class Settings(BaseSettings):
     OPENSUBTITLES_RATE_LIMIT:        int    = 40
     OPENSUBTITLES_RATE_WINDOW:       int    = 10
     OPENSUBTITLES_LANGUAGE:          str    = "en"
-    OPENSUBTITLES_ORDER_BY:          List[str] = ["download_count"]
+    OPENSUBTITLES_ORDER_BY:          str    = "download_count"
     OPENSUBTITLES_ORDER_DIRECTION:   str    = "desc"
-    OPENSUBTITLES_TRUSTED_SOURCES:   bool   = True
+    OPENSUBTITLES_TRUSTED_SOURCES:   str    = "include"
 
     # ============= MongoDB Configuration =============
     """MongoDB database connection and collection settings."""
