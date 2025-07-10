@@ -5,8 +5,8 @@ class SubtitleFile(BaseModel):
     file_id:        int
     file_name:      str
     cd_number:      Optional[int] = None
-    download_url:   str
-    subtitle_text:  str
+    download_url:   Optional[str] = None
+    subtitle_text:  Optional[str] = None
 
 class SubtitleFileInfo(BaseModel):
     subtitle_id:        int

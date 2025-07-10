@@ -25,7 +25,7 @@ class SearchResults(BaseModel):
 class TranscriptChunk(BaseModel):
     index:      int
     text:       str
-    embedding:  List[float]
+    embedding:  Optional[List[float]] = None
 
 class Genre(BaseModel):
     name:   str
@@ -131,12 +131,12 @@ class MovieDetails(BaseModel):
     images:             MovieImages
     videos:             MovieVideos
     watch_providers:    WatchProviders = Field(alias="watch/providers")
-    transcript_chunks:  List[TranscriptChunk]
-    embedding_model:    str
+    transcript_chunks:  Optional[List[TranscriptChunk]] = None
+    embedding_model:    Optional[str] = None
     vote_average:       float
     vote_count:         int
-    created_at:         datetime
-    updated_at:         datetime
+    created_at:         Optional[datetime] = None
+    updated_at:         Optional[datetime] = None
 
 class TVDetails(BaseModel):
     id:                 int
@@ -166,5 +166,5 @@ class TVDetails(BaseModel):
     spoken_languages:   List[SpokenLanguage]
     vote_average:       float
     vote_count:         int
-    created_at:         datetime
-    updated_at:         datetime 
+    created_at:         Optional[datetime] = None
+    updated_at:         Optional[datetime] = None
