@@ -1,15 +1,24 @@
 import time
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from application.core.logging import get_logger
 from application.api import api_router
-from infrastructure.database import close_database_connections
+from application.core.logging import get_logger
+from application.core.dependencies import close_database_connections
 
 # Initialize logging
 logger = get_logger(__name__)
+
+# Application lifespan management
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    logger.info("Shutting down application...")
+    close_database_connections()
+    logger.info("Application shutdown complete.")
 
 # Create FastAPI application
 application = FastAPI(
@@ -49,14 +58,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Include API routes
 application.include_router(api_router)
-
-# Application shutdown event
-@application.on_event("shutdown")
-async def shutdown_event():
-    """Clean up resources on application shutdown."""
-    logger.info("Shutting down application...")
-    close_database_connections()
-    logger.info("Application shutdown complete.")
 
 # Health check endpoint
 @application.get("/health")

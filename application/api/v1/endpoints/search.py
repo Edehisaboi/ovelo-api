@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from application.core.config import settings
-from application.core import movie_db, tv_db
+from application.core.resources import movie_db, tv_db
 from application.core.logging import get_logger
 
 from application.models.media import MovieDetails, TVDetails, SearchResults
