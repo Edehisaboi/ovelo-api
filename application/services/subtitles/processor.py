@@ -1,11 +1,11 @@
 from typing import List
 
 from langchain_experimental.text_splitter import SemanticChunker
-from langchain_openai import OpenAIEmbeddings
 
 from application.models.media import TranscriptChunk
 from application.core.config import settings
 from application.core.logging import get_logger
+from application.core.resources import embedding_client
 
 from .parser import SRTParser
 from .validator import SubtitleValidator
@@ -21,7 +21,7 @@ class SubtitleProcessor:
         self._parser = SRTParser()
         self._validator = SubtitleValidator()
         self._chunker = SemanticChunker(
-            OpenAIEmbeddings(),
+            embedding_client,
             breakpoint_threshold_type=settings.CHUNK_BREAKPOINT_TYPE,
             breakpoint_threshold_amount=settings.CHUNK_BREAKPOINT_AMOUNT,
             number_of_chunks=settings.CHUNK_SIZE

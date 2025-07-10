@@ -1,9 +1,9 @@
 from typing import List
 
 from external.clients.openai import EmbeddingClient
-from application.models.media import TranscriptChunk
+from application.models import TranscriptChunk
 from application.core.logging import get_logger
-from application.core import embedding_client
+from application.core.resources import embedding_client
 
 logger = get_logger(__name__)
 
