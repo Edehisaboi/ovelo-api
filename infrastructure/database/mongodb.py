@@ -10,10 +10,10 @@ from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
 from application.core.config import settings
+from external.clients import EmbeddingClient
 from application.core.logging import get_logger
 from application.models.media import MovieDetails, TVDetails
 from application.repositories.document import movie_document, tv_document
-from application.core import embedding_client
 
 from .indexes import MongoIndex
 
@@ -30,13 +30,15 @@ class MongoClientWrapper(Generic[T]):
         self,
         model:           Type[T],
         collection_name: str,
-        database_name:   str = settings.MONGODB_DB,
-        mongodb_uri:     str = settings.MONGODB_URL,
+        database_name:   str,
+        mongodb_uri:     str,
+        embedding_client: "EmbeddingClient" = None
     ) -> None:
         self.model           = model
         self.collection_name = collection_name
         self.database_name   = database_name
         self.mongodb_uri     = mongodb_uri
+        self.embedding_client= embedding_client
         self.retriever       : Optional[MongoDBAtlasHybridSearchRetriever] = None
         self._is_closed      = False
 
@@ -95,7 +97,7 @@ class MongoClientWrapper(Generic[T]):
                 collection_type=self.collection_name
             ).create(
                 embedding_dim=embedding_dim,
-                is_hybrid=True
+                is_hybrid=False # Mongo M0 free clusters have a limit of 3 search and vector indexes per cluster.
             )
         except Exception as e:
             logger.error(f"Error initializing indexes: {e}")
@@ -171,9 +173,14 @@ class MongoClientWrapper(Generic[T]):
         k: int = settings.RAG_TOP_K
     ) -> MongoDBAtlasHybridSearchRetriever:
         """Get a hybrid search retriever for this collection."""
+        if self.embedding_client is None or not self.embedding_client.embeddings:
+            raise RuntimeError(
+                "Embedding client is not initialized. "
+                "Pass an embedding_client instance to MongoClientWrapper."
+            )
         vectorstore = MongoDBAtlasVectorSearch.from_connection_string(
             connection_string=self.mongodb_uri,
-            embedding=embedding_client.embeddings,
+            embedding=self.embedding_client.embeddings,
             namespace=f"{self.database_name}.{self.collection_name}",
             text_key=text_key,
             embedding_key=embedding_key,

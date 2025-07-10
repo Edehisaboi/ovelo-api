@@ -59,38 +59,33 @@ class MongoIndex:
         Create traditional MongoDB indexes for efficient querying and search.
         """
         try:
-            text_index = IndexModel(
-                [("title", TEXT)], name="text_search"
-            )
             indexes = [
                 IndexModel([("id", ASCENDING)], unique=True, name="tmdb_id_unique"),
-                IndexModel([("title", ASCENDING)], name="title_index"),
-                IndexModel([("release_date", ASCENDING)], name="release_date_index"),
-                IndexModel([("vote_average", ASCENDING)], name="vote_average_index"),
-                IndexModel([("vote_count", ASCENDING)], name="vote_count_index"),
-                IndexModel([("status", ASCENDING)], name="status_index"),
                 IndexModel([("genres.name", ASCENDING)], name="genres_index"),
                 IndexModel([("spoken_languages.name", ASCENDING)], name="languages_index"),
                 IndexModel([("origin_country", ASCENDING)], name="country_index"),
-                text_index,
             ]
-            # TV-specific indexes
-            if self.collection_type == settings.TV_COLLECTION:
-                indexes += [
-                    IndexModel([("name", ASCENDING)], name="name_index"),
-                    IndexModel([("first_air_date", ASCENDING)], name="first_air_date_index"),
-                    IndexModel([("last_air_date", ASCENDING)], name="last_air_date_index"),
-                    IndexModel([("number_of_seasons", ASCENDING)], name="seasons_index"),
-                    IndexModel([("number_of_episodes", ASCENDING)], name="episodes_index"),
-                ]
+
+            if self.collection_type == settings.MOVIES_COLLECTION:
+                # MovieDetails: text index on 'title' and 'original_title'
+                indexes.append(IndexModel([("title", TEXT), ("original_title", TEXT)], name="title_search_index"))
+            elif self.collection_type == settings.TV_COLLECTION:
+                # TVDetails: compound text index on 'name' and 'original_name'
+                indexes.append(IndexModel([("name", TEXT), ("original_name", TEXT)], name="title_name_search_index"))
+                indexes.append(IndexModel([("number_of_seasons", ASCENDING)], name="seasons_index"))
+
+            # Drop existing text indexes to avoid conflicts
+            for index in self.collection.list_indexes():
+                if index.get("key", {}).get("_fts") == "text":
+                    self.collection.drop_index(index["name"])
+
+            # Create (or recreate) all indexes
             self.collection.create_indexes(indexes)
             logger.debug(f"Created traditional indexes for '{self.collection_type}' collection.")
+
         except OperationFailure as e:
-            if "already exists" in str(e):
-                logger.info(f"Traditional indexes already exist for '{self.collection_type}'.")
-            else:
-                logger.error(f"Error creating traditional indexes: {e}")
-                raise
+            logger.error(f"Error creating traditional indexes: {e}")
+            raise
         except Exception as e:
             logger.error(f"Unexpected error creating traditional indexes: {e}")
             raise
@@ -116,11 +111,8 @@ class MongoIndex:
                 )
             logger.debug(f"Created vector/hybrid search indexes for '{self.collection_type}'.")
         except OperationFailure as e:
-            if "already exists" in str(e):
-                logger.info(f"Vector search index already exists for '{self.collection_type}'.")
-            else:
-                logger.error(f"Error creating vector search index: {e}")
-                raise
+            logger.error(f"Error creating vector search index: {e}")
+            raise
         except Exception as e:
             logger.error(f"Unexpected error creating vector search index: {e}")
             raise
