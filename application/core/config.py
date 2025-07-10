@@ -57,16 +57,16 @@ class Settings(BaseSettings):
     # ============= Vector Search Configuration =============
     """Vector search and embedding settings for similarity search."""
     # Index names
-    MOVIE_INDEX_NAME:        str = "movie_vector_index"
-    TV_INDEX_NAME:           str = "tv_vector_index"
+    MOVIE_INDEX_NAME:        str = "movie_index"
+    TV_INDEX_NAME:           str = "tv_index"
 
     # Embedding paths
-    MOVIE_EMBEDDING_PATH:    str = "embedding"
-    TV_EMBEDDING_PATH:       str = "embedding"
+    MOVIE_EMBEDDING_PATH:    str = "transcript_chunks.embedding"
+    TV_EMBEDDING_PATH:       str = "seasons.episodes.transcript_chunks.embedding"
 
     # Text paths
-    MOVIE_TEXT_PATH:         str = "text"
-    TV_TEXT_PATH:            str = "text"
+    MOVIE_TEXT_PATH:         str = "transcript_chunks.text"
+    TV_TEXT_PATH:            str = "seasons.episodes.transcript_chunks.text"
 
     # Vector dimensions
     MOVIE_NUM_DIMENSIONS:    int = 1536
