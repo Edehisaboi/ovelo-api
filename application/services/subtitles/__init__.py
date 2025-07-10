@@ -4,15 +4,15 @@ from .validator import SubtitleValidator
 
 # Create singleton instance
 subtitle_processor = SubtitleProcessor()
-srt_parser         = SRTParser()
 subtitle_validator = SubtitleValidator()
+srt_parser         = SRTParser()
 
 
 __all__ = [
     # Instances
     "subtitle_processor",
-    "srt_parser",
     "subtitle_validator",
+    "srt_parser",
 
     # Classes Models
     "SubtitleProcessor",

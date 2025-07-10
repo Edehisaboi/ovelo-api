@@ -16,12 +16,11 @@ logger = get_logger(__name__)
 
 class SubtitleProcessor:
     """Process and chunk subtitle content."""
-    
     def __init__(self):
         self._parser = SRTParser()
         self._validator = SubtitleValidator()
         self._chunker = SemanticChunker(
-            embedding_client,
+            embedding_client.embeddings,
             breakpoint_threshold_type=settings.CHUNK_BREAKPOINT_TYPE,
             breakpoint_threshold_amount=settings.CHUNK_BREAKPOINT_AMOUNT,
             number_of_chunks=settings.CHUNK_SIZE
