@@ -1,8 +1,9 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import httpx
 
 from .base import AbstractAPIClient
+from application.core.config import settings
 from application.utils.rate_limiter import RateLimiter
 from application.models.subtitles import SubtitleFile, SubtitleSearchResults
 
@@ -27,9 +28,9 @@ class OpenSubtitlesClient(AbstractAPIClient):
         """Get the headers for OpenSubtitles API requests."""
         return {
             "User-Agent":   "Moovzmatch/1.0",
-            "Api-Key":      self._api_key,
             "Content-Type": "application/json",
-            "Accept":       "application/json"
+            "Accept":       "application/json",
+            "Api-Key":      self._api_key,
         }
     
     @property
@@ -50,29 +51,34 @@ class SearchService:
     
     @staticmethod
     async def _build_params(
-        id_key:             str,
-        id_value:           str | int,
-        language:           str,
-        season_number:      Optional[int],
-        episode_number:     Optional[int],
-        order_by:           Optional[str],
-        order_direction:    Optional[str],
-        trusted_sources:    Optional[bool] = None
+            id_key:          str,
+            id_value:        str | int,
+            season_number:   Optional[int] = None,
+            episode_number:  Optional[int] = None,
+            order_by:        Optional[str] = settings.OPENSUBTITLES_ORDER_BY,
+            order_direction: Optional[str] = settings.OPENSUBTITLES_ORDER_DIRECTION,
+            language:        str = settings.OPENSUBTITLES_LANGUAGE,
+            trusted_sources: Optional[bool] = settings.OPENSUBTITLES_TRUSTED_SOURCES
     ) -> Dict[str, Any]:
-        """Build search parameters."""
+        """
+        Build and return params dict for OpenSubtitles API, keeping languages first.
+        """
         params = {
-            id_key: id_value,
-            "languages": language
+            "languages": language,
+            id_key : id_value
         }
-        if season_number:
+
+        # Add other optional params if present
+        if season_number is not None:
             params["season_number"] = season_number
-        if episode_number:
+        if episode_number is not None:
             params["episode_number"] = episode_number
         if order_by:
             params["order_by"] = order_by
         if order_direction:
             params["order_direction"] = order_direction
         if trusted_sources is not None:
+            # OpenSubtitles expects 'true'/'false' as string, not bool
             params["trusted_sources"] = str(trusted_sources).lower()
         return params
     
@@ -82,7 +88,7 @@ class SearchService:
         language:           str = "en",
         season_number:      Optional[int] = None,
         episode_number:     Optional[int] = None,
-        order_by:           Optional[List[str]] = None,
+        order_by:           Optional[str] = None,
         order_direction:    Optional[str] = None,
         trusted_sources:    Optional[bool] = None
     ) -> SubtitleSearchResults:
@@ -106,7 +112,7 @@ class SearchService:
         language:           str = "en",
         season_number:      Optional[int] = None,
         episode_number:     Optional[int] = None,
-        order_by:           Optional[List[str]] = None,
+        order_by:           Optional[str] = None,
         order_direction:    Optional[str] = None,
         trusted_sources:    Optional[bool] = None
     ) -> SubtitleSearchResults:
@@ -131,7 +137,7 @@ class SearchService:
         language:           str = "en",
         season_number:      Optional[int] = None,
         episode_number:     Optional[int] = None,
-        order_by:           Optional[List[str]] = None,
+        order_by:           Optional[str] = None,
         order_direction:    Optional[str] = None,
         trusted_sources:    Optional[bool] = None
     ) -> SubtitleSearchResults:
@@ -161,9 +167,12 @@ class SubtitlesService:
         subtitle_file: SubtitleFile
     ) -> SubtitleFile:
         """Download a subtitle file."""
-        data = await self._client.post("/download/", {"file_id": subtitle_file.file_id})
+        data = await self._client.post("/download", {"file_id": subtitle_file.file_id})
         
         download_url = data["link"]
+        if not download_url:
+            raise RuntimeError(f"Download link missing in response: {data}")
+
         subtitle_text = await self._fetch_subtitle_text(download_url)
         
         return subtitle_file.model_copy(

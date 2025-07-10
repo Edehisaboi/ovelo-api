@@ -40,8 +40,16 @@ class EmbeddingClient:
     async def create_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Create embeddings for multiple texts."""
         return await self._embeddings.aembed_documents(texts)
+    
+    def embed_query(self, text: str) -> list[float]:
+        """Synchronous method for embedding a single query (required by SemanticChunker)."""
+        return self._embeddings.embed_query(text)
 
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Synchronous method for embedding documents (required by SemanticChunker)."""
+        return self._embeddings.embed_documents(texts)
 
+    
 class OpenAISTT:
     """OpenAI realtime speech-to-text client using WebSocket API."""
 
