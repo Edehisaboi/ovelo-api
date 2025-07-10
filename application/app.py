@@ -1,7 +1,7 @@
 import time
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -75,6 +75,26 @@ async def root():
         "docs": "/docs",
         "health": "/health"
     }
+
+from pydantic import BaseModel
+
+class MovieIdRequest(BaseModel):
+    movie_id: int
+
+@application.post("/test_extractor", response_model=dict)
+async def test_extractor(payload: MovieIdRequest):
+    from application.data.extract import Extractor
+    from application.models import MovieDetails
+
+    movie_id = payload.movie_id
+    try:
+        extractor = Extractor()
+        movie: MovieDetails = await extractor.extract_movie_data(movie_id)
+        # .model_dump() returns a dict
+        return movie.model_dump()
+    except Exception as e:
+        logger.error(f"Error extracting movie data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # if __name__ == "__main__":
 #     import uvicorn
