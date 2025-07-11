@@ -33,9 +33,14 @@ class SRTParser:
 
     def _clean_text(self, text: str, remove_punct: bool = True, correct_spelling: bool = True) -> str:
         text = self._normalize_text(text)
+        text = re.sub(r"\{.*?\}", "", text) # Remove SRT curly-brace tags
         text = self.formatting_tags_pattern.sub('', text)
         text = self.sound_effects_pattern.sub('', text)
         text = text.replace('*', '')
+
+        # Remove leading dash for dialogue lines
+        text = re.sub(r"^\s*-\s*", "", text)
+
         if remove_punct:
             text = text.replace('...', ',').replace('-', '')
         text = ' '.join(text.split())  # remove extra whitespace
@@ -56,7 +61,7 @@ class SRTParser:
             line = line.strip()
             if not line or self.line_number_pattern.match(line) or self.timestamp_pattern.match(line):
                 continue
-            cleaned_line = self._clean_text(line, remove_punct=False)
+            cleaned_line = self._clean_text(line)
             if cleaned_line:
                 dialogue_lines.append(cleaned_line)
 
