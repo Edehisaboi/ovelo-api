@@ -1,11 +1,12 @@
-from typing import Any, Dict, Optional
+import asyncio
+from typing import Any, Dict, List, Optional
 
 import httpx
 
 from .base import AbstractAPIClient
 from application.core.config import settings
 from application.utils.rate_limiter import RateLimiter
-from application.models.subtitles import SubtitleFile, SubtitleSearchResults
+from application.models import SubtitleFile, SubtitleSearchResult, SubtitleSearchResults, Season
 
 
 class OpenSubtitlesClient(AbstractAPIClient):
@@ -108,14 +109,14 @@ class SearchService:
     
     async def by_tmdb(
         self,
-        tmdb_id:            int,
-        language:           str = "en",
-        season_number:      Optional[int] = None,
-        episode_number:     Optional[int] = None,
-        order_by:           Optional[str] = None,
-        order_direction:    Optional[str] = None,
-        trusted_sources:    Optional[bool] = None
-    ) -> SubtitleSearchResults:
+        tmdb_id:           int,
+        language:          str = "en",
+        season_number:     Optional[int] = None,
+        episode_number:    Optional[int] = None,
+        order_by:          Optional[str] = None,
+        order_direction:   Optional[str] = None,
+        trusted_sources:   Optional[bool] = None
+    ) -> Optional[SubtitleSearchResult]:
         """Search subtitles by TMDb ID."""
         params = await self._build_params(
             id_key="tmdb_id",
@@ -128,20 +129,23 @@ class SearchService:
             trusted_sources=trusted_sources
         )
         data = await self._client.get("/subtitles", params)
-        return SubtitleSearchResults(**data)
-    
+        search_results =  SubtitleSearchResults(**data)
+        if search_results.results:
+            return search_results.results[0]
+        return None  # No subtitles found
+
     async def by_parent(
-        self,
-        parent_type:        str,
-        parent_id:          str | int,
-        language:           str = "en",
-        season_number:      Optional[int] = None,
-        episode_number:     Optional[int] = None,
-        order_by:           Optional[str] = None,
-        order_direction:    Optional[str] = None,
-        trusted_sources:    Optional[bool] = None
-    ) -> SubtitleSearchResults:
-        """Search subtitles by parent ID (for TV shows)."""
+            self,
+            parent_type:     str,
+            parent_id:       str | int,
+            language:        str = "en",
+            season_number:   Optional[int] = None,
+            episode_number:  Optional[int] = None,
+            order_by:        Optional[str] = None,
+            order_direction: Optional[str] = None,
+            trusted_sources: Optional[bool] = None
+    ) -> Optional[SubtitleSearchResult]:
+        """Search subtitles by parent ID (for TV shows)"""
         param_key = f"parent_{parent_type.lower()}_id"
         params = await self._build_params(
             id_key=param_key,
@@ -154,7 +158,35 @@ class SearchService:
             trusted_sources=trusted_sources
         )
         data = await self._client.get("/subtitles", params)
-        return SubtitleSearchResults(**data)
+        search_results = SubtitleSearchResults(**data)
+        if search_results.results:
+            return search_results.results[0]  # Return only the first/best result
+        return None  # No subtitles found
+
+    async def all_parent_search(
+            self,
+            parent_type: str,
+            parent_id:   str | int,
+            seasons:     List[Season]
+    ) -> List[Optional[SubtitleSearchResult]]:
+        """Search all subtitles for a parent (TV show) across all seasons and episodes, one best result per episode."""
+        if not seasons:
+            raise ValueError("Seasons list cannot be empty.")
+
+        tasks = []
+        for season in seasons:
+            for episode_num in range(1, season.episode_count + 1):
+                tasks.append(
+                    self.by_parent(
+                        parent_type=parent_type,
+                        parent_id=parent_id,
+                        season_number=season.season_number,
+                        episode_number=episode_num
+                    )
+                )
+
+        return await asyncio.gather(*tasks)
+
 
 class SubtitlesService:
     """OpenSubtitles subtitles service implementation."""
@@ -167,6 +199,9 @@ class SubtitlesService:
         subtitle_file: SubtitleFile
     ) -> SubtitleFile:
         """Download a subtitle file."""
+        if not subtitle_file or not subtitle_file.file_id:
+            raise ValueError("Invalid subtitle file provided for download.")
+
         data = await self._client.post("/download", {"file_id": subtitle_file.file_id})
         
         download_url = data["link"]

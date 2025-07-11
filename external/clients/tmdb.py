@@ -191,7 +191,7 @@ class TVService:
         data = await self._client.get(f"/tv/{tv_id}/season/{season_number}", params)
         return Season(**data)
     
-    async def get_all_seasons_with_episodes(
+    async def _get_all_seasons_with_episodes(
         self,
         tv_id:              int,
         number_of_seasons:  int
@@ -220,8 +220,8 @@ class TVService:
         
         # If seasons are requested, fetch them in parallel
         if include_seasons:
-            seasons_data = await self.get_all_seasons_with_episodes(
-                tv_id, 
+            seasons_data = await self._get_all_seasons_with_episodes(
+                tv_id,
                 data["number_of_seasons"]
             )
             data["seasons"] = seasons_data
