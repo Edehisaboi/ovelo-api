@@ -91,9 +91,11 @@ class Settings(BaseSettings):
 
     # ============= Text Processing Configuration =============
     """Text chunking and processing settings."""
-    CHUNK_BREAKPOINT_TYPE:   Literal["percentile", "standard_deviation", "interquartile", "gradient"] = "percentile"
-    CHUNK_BREAKPOINT_AMOUNT: float = 90.0
-    CHUNK_SIZE:              Optional[int] = 8000
+    CHUNK_BREAKPOINT_TYPE:    Literal["percentile", "standard_deviation", "interquartile", "gradient"] = "percentile"
+    CHUNK_BREAKPOINT_AMOUNT:  float = 95.0
+    CHUNK_SIZE:               Optional[int] = 8000
+    CHUNK_BUFFER_SIZE:        int = 1
+    MIN_CHUNK_WORDS:          int = 5
 
     # ============= Caching Configuration =============
     """Cache settings for search results and other data."""
