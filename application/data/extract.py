@@ -1,69 +1,249 @@
-from typing import List
+import asyncio
+from typing import List, Optional
 
-from application.models import (
-    MovieDetails,
-    SubtitleSearchResults,
-    SubtitleFile,
-    TranscriptChunk,
-)
-
-from application.services.media import tmdb_service
-from application.services.embeddings import embedding_service
-from application.services.subtitles import subtitle_processor
-from application.core.resources import opensubtitles_client
 from application.core.logging import get_logger
-from application.core.config import settings
+from application.core.resources import opensubtitles_client
+from application.models import (
+    Episode,
+    MovieDetails,
+    Season,
+    SubtitleFile,
+    SubtitleSearchResult,
+    TranscriptChunk,
+    TVDetails,
+)
+from application.services.embeddings import embedding_service
+from application.services.media import tmdb_service
+from application.services.subtitles import subtitle_processor
 
 logger = get_logger(__name__)
 
 
 class Extractor:
-    """Extractor for fetching and enriching movie metadata."""
+    """Extractor for fetching and enriching movie and TV show metadata."""
 
     @staticmethod
     async def extract_movie_data(movie_id: int) -> MovieDetails:
+        """
+        Extract and enrich movie data with transcript chunks and embeddings.
+
+        Args:
+            movie_id: The TMDb ID of the movie.
+
+        Returns:
+            MovieDetails: Enriched movie data with transcript chunks.
+
+        Raises:
+            ValueError: If movie_id is invalid.
+            LookupError: If no TMDb data or subtitles are found.
+            IOError: If subtitle download fails.
+            RuntimeError: If embedding enrichment fails.
+        """
         if not movie_id:
             raise ValueError("Movie ID must be a non-zero integer.")
 
         try:
-            # Fetch movie metadata
-            movie: MovieDetails = await tmdb_service.get_movie_details(movie_id)
-            if not movie:
-                raise LookupError(f"No TMDb data for movie ID {movie_id}.")
+            # Fetch movie metadata from TMDb
+            movie_details: MovieDetails = await tmdb_service.get_movie_details(movie_id)
+            if not movie_details:
+                raise LookupError(f"No TMDb data found for movie ID {movie_id}.")
 
-            # Find and download top subtitles
-            subs_result: SubtitleSearchResults = await opensubtitles_client.search.by_tmdb(movie_id)
-            best = subs_result.results[0]
-            file_meta: SubtitleFile = best.attributes.files[0]
-            downloaded: SubtitleFile = await opensubtitles_client.subtitles.download(file_meta)
-            if not (downloaded and downloaded.subtitle_text):
+            # Search for subtitles using OpenSubtitles
+            subtitle_search_result: SubtitleSearchResult = await opensubtitles_client.search.by_tmdb(movie_id)
+            if not subtitle_search_result.attributes.files:
+                raise LookupError(f"No subtitles found for movie ID {movie_id}.")
+
+            # Download the first subtitle file
+            subtitle_file: SubtitleFile = subtitle_search_result.attributes.files[0]
+            downloaded_subtitle: SubtitleFile = await opensubtitles_client.subtitles.download(subtitle_file)
+            if not downloaded_subtitle or not downloaded_subtitle.subtitle_text:
                 raise IOError(f"Subtitle download failed for movie ID {movie_id}.")
 
-            # Parse into transcript chunks
-            chunks: List[TranscriptChunk] = subtitle_processor.process(downloaded.subtitle_text)
-            if not chunks:
+            # Process subtitle text into transcript chunks
+            transcript_chunks: List[TranscriptChunk] = subtitle_processor.process(downloaded_subtitle.subtitle_text)
+            if not transcript_chunks:
                 raise ValueError("No valid subtitle chunks to process.")
 
-            # Embed from chunks
-            enriched: List[TranscriptChunk] = await embedding_service.update_with_embeddings(chunks)
-            if not enriched or enriched[0].embedding is None:
+            # Generate embeddings for the transcript chunks
+            enriched_chunks: List[TranscriptChunk] = await embedding_service.update_with_embeddings(transcript_chunks)
+            if not enriched_chunks or enriched_chunks[0].embedding is None:
                 raise RuntimeError("Embedding enrichment failed.")
 
+            # Update the movie model with enriched chunks
+            updated_movie = movie_details.model_copy(update={
+                "transcript_chunks": enriched_chunks
+            })
+            logger.info(f"Extracted and enriched movie ID {movie_id} successfully.")
+
+            return updated_movie
+
         except Exception as exc:
-            # Centralized error handling
+            # Centralized error handling with detailed logging
             logger.exception(f"Failed extracting movie data for ID {movie_id}")
             raise exc from None
 
-        # Update the model
-        updated_movie = movie.model_copy(update={
-            "transcript_chunks": enriched,
-            "embedding_model": settings.OPENAI_EMBEDDING_MODEL,
-        })
+    @staticmethod
+    async def extract_tv_data(tv_id: int) -> TVDetails:
+        """
+        Extract and enrich TV show data with transcript chunks and embeddings for each episode.
 
-        logger.info(f"Extracted and enriched movie ID {movie_id} successfully.")
+        Args:
+            tv_id: The TMDb ID of the TV show.
 
-        from pprint import pprint
+        Returns:
+            TVDetails: Enriched TV show data with transcript chunks in episodes.
 
-        pprint(updated_movie.model_dump())
+        Raises:
+            ValueError: If tv_id is invalid.
+            LookupError: If no TMDb data or subtitles are found.
+            RuntimeError: If no episodes could be processed with subtitles.
+        """
+        if not tv_id:
+            raise ValueError("TV ID must be a non-zero integer.")
 
-        return updated_movie
+        try:
+            # Fetch TV show metadata from TMDb
+            tv_details: TVDetails = await tmdb_service.get_tv_details(tv_id)
+            if not tv_details:
+                raise LookupError(f"No TMDb data found for TV ID {tv_id}.")
+
+            # Search for subtitles for all episodes across all seasons
+            subtitle_search_results: List[Optional[SubtitleSearchResult]] = await opensubtitles_client.search.all_parent_search(
+                parent_type="TMDB",
+                parent_id=tv_id,
+                seasons=tv_details.seasons
+            )
+            if not subtitle_search_results:
+                raise LookupError(f"No subtitles found for TV ID {tv_id}.")
+
+            # Process episodes with subtitles concurrently
+            enriched_seasons = await Extractor._process_tv_seasons(tv_details.seasons, subtitle_search_results)
+            if not enriched_seasons:
+                raise RuntimeError("No episodes could be processed with subtitles.")
+
+            # Update the TV model with enriched seasons
+            updated_tv = tv_details.model_copy(update={"seasons": enriched_seasons})
+            logger.info(f"Extracted and enriched TV ID {tv_id} successfully with {len(enriched_seasons)} seasons.")
+
+            return updated_tv
+
+        except Exception as exc:
+            # Centralized error handling with detailed logging
+            logger.exception(f"Failed extracting TV data for ID {tv_id}")
+            raise exc from None
+
+    @staticmethod
+    async def _process_tv_seasons(
+        seasons: List[Season], subtitle_search_results: List[Optional[SubtitleSearchResult]]
+    ) -> List[Season]:
+        """
+        Process all seasons and episodes with their corresponding subtitle results.
+
+        Args:
+            seasons: List of seasons from TVDetails.
+            subtitle_search_results: List of subtitle search results (one per episode).
+
+        Returns:
+            List[Season]: Enriched seasons with transcript chunks in episodes.
+        """
+        # Create a flat list of episode processing tasks
+        episode_tasks = []
+
+        for season in seasons:
+            for episode in season.episodes:
+                # Find the matching subtitle result for this episode
+                matching_result = next(
+                    (
+                        result
+                        for result in subtitle_search_results
+                        if result
+                        and result.attributes.feature_details
+                        and result.attributes.feature_details.season_number == episode.season_number
+                        and result.attributes.feature_details.episode_number == episode.episode_number
+                    ),
+                    None,
+                )
+                # Create a task to process this episode
+                task = Extractor._process_episode_with_subtitles(episode, matching_result)
+                episode_tasks.append((season.season_number, episode.episode_number, task))
+
+        # Execute all episode processing tasks concurrently
+        episode_results = await asyncio.gather(
+            *[task for _, _, task in episode_tasks],
+            return_exceptions=True
+        )
+
+        # Build a lookup dictionary: (season_number, episode_number) -> result
+        episode_tasks_keys = [
+            (season.season_number, episode.episode_number)
+            for season in seasons
+            for episode in season.episodes
+        ]
+        result_lookup = dict(zip(episode_tasks_keys, episode_results))
+
+        # Reconstruct enriched seasons with processed episodes
+        enriched_seasons = []
+        for season in seasons:
+            enriched_episodes = []
+            for episode in season.episodes:
+                result = result_lookup.get((season.season_number, episode.episode_number))
+                if isinstance(result, Exception):
+                    logger.warning(f"Failed to process S{season.season_number}E{episode.episode_number}: {result}")
+                    enriched_episodes.append(episode)
+                elif result is not None:
+                    enriched_episodes.append(result)
+                else:
+                    # No result found; fallback to original episode
+                    enriched_episodes.append(episode)
+            enriched_season = season.model_copy(update={"episodes": enriched_episodes})
+            enriched_seasons.append(enriched_season)
+
+        return enriched_seasons
+
+    @staticmethod
+    async def _process_episode_with_subtitles(
+        episode: Episode, subtitle_search_result: Optional[SubtitleSearchResult]
+    ) -> Episode:
+        """
+        Process a single episode with its subtitle data.
+
+        Args:
+            episode: The episode to process.
+            subtitle_search_result: Subtitle search result for this episode (maybe None).
+
+        Returns:
+            Episode: Enriched episode with transcript chunks, or original if processing fails.
+        """
+        if not subtitle_search_result:
+            logger.debug(f"No subtitles found for S{episode.season_number}E{episode.episode_number}")
+            return episode
+
+        try:
+            # Download the first subtitle file
+            subtitle_file: SubtitleFile = subtitle_search_result.attributes.files[0]
+            downloaded_subtitle: SubtitleFile = await opensubtitles_client.subtitles.download(subtitle_file)
+            if not downloaded_subtitle or not downloaded_subtitle.subtitle_text:
+                logger.warning(f"Subtitle download failed for S{episode.season_number}E{episode.episode_number}")
+                return episode
+
+            # Process subtitle text into transcript chunks
+            transcript_chunks: List[TranscriptChunk] = subtitle_processor.process(downloaded_subtitle.subtitle_text)
+            if not transcript_chunks:
+                logger.warning(f"No valid subtitle chunks for S{episode.season_number}E{episode.episode_number}")
+                return episode
+
+            # Generate embeddings for the transcript chunks
+            enriched_chunks: List[TranscriptChunk] = await embedding_service.update_with_embeddings(transcript_chunks)
+            if not enriched_chunks or enriched_chunks[0].embedding is None:
+                logger.warning(f"Embedding generation failed for S{episode.season_number}E{episode.episode_number}")
+                return episode
+
+            # Update episode with enriched transcript chunks
+            enriched_episode = episode.model_copy(update={"transcript_chunks": enriched_chunks})
+            logger.debug(f"Successfully processed S{episode.season_number}E{episode.episode_number} with {len(enriched_chunks)} chunks")
+            return enriched_episode
+
+        except Exception as e:
+            logger.error(f"Error processing episode S{episode.season_number}E{episode.episode_number}: {e}")
+            # Return original episode on failure
+            return episode
