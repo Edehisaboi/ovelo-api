@@ -23,14 +23,11 @@ class MovieDocumentBuilder(DocumentBuilder):
         doc = movie.model_dump()
         
         # Add metadata
+        doc["media_type"] = "movie"
         doc["created_at"] = datetime.now(UTC)
         doc["updated_at"] = datetime.now(UTC)
         doc["embedding_model"] = settings.OPENAI_EMBEDDING_MODEL
-        
-        # Ensure transcript_chunks is initialized
-        if "transcript_chunks" not in doc:
-            doc["transcript_chunks"] = []
-            
+
         return doc
 
 
@@ -42,21 +39,9 @@ class TVDocumentBuilder(DocumentBuilder):
         doc = tv.model_dump()
         
         # Add metadata
+        doc["media_type"] = "tv"
         doc["created_at"] = datetime.now(UTC)
         doc["updated_at"] = datetime.now(UTC)
         doc["embedding_model"] = settings.OPENAI_EMBEDDING_MODEL
         
         return doc
-
-
-# Create singleton instances
-movie_document = MovieDocumentBuilder()
-tv_document = TVDocumentBuilder()
-
-__all__ = [
-    "DocumentBuilder",
-    "MovieDocumentBuilder", 
-    "TVDocumentBuilder",
-    "movie_document",
-    "tv_document"
-] 
