@@ -42,7 +42,6 @@ class SubtitleProcessor:
     def __init__(self):
         self._parser = SRTParser()
         self._validator = SubtitleValidator()
-        self._min_chunk_words = settings.MIN_CHUNK_WORDS
 
         self._chunker = SemanticChunker(
             embeddings=embedding_client.embeddings,
@@ -58,7 +57,7 @@ class SubtitleProcessor:
         """
         try:
             chunks = [chunk.strip() for chunk in self._chunker.split_text(text)]
-            min_words = self._min_chunk_words
+            min_words = settings.MIN_CHUNK_WORDS
             if not chunks:
                 return []
 
@@ -144,6 +143,7 @@ class SubtitleProcessor:
         """
         try:
             self._validator.validate(srt_content)
+
             cleaned_lines = self._parser.parse_srt(srt_content)
             if not cleaned_lines:
                 raise ValueError("No valid subtitle lines found after parsing.")
@@ -153,16 +153,11 @@ class SubtitleProcessor:
             if not chunks:
                 raise ValueError("No semantic chunks produced from subtitle content.")
 
-            # Step 1: Enforce max token size
+            # Enforce max token size
             chunks = self._enforce_token_limit_with_rcts(chunks)
 
-            # Step 2: Apply percentage overlap
+            # Apply percentage overlap
             overlapped_chunks = self._overlap_chunks_by_percent(chunks, settings.CHUNK_OVERLAP_PERCENT)
-
-            # Optionally print debug info
-            print("\n\n DEBUG: Chunks after initial processing:")
-            for i, chunk in enumerate(overlapped_chunks):
-                print(f"Chunk {i}:\n{chunk}\n")
 
             self._validator.validate_chunks(overlapped_chunks)
 
