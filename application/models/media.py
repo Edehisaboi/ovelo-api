@@ -81,7 +81,7 @@ class Episode(BaseModel):
     episode_number: int
     episode_type:   str
     runtime:        Optional[int] = None
-    transcript_chunks:  List[TranscriptChunk]
+    transcript_chunks:  Optional[List[TranscriptChunk]] = None
 
 class Season(BaseModel):
     name:           str
@@ -110,7 +110,7 @@ class ExternalID(BaseModel):
     twitter_id:     Optional[str] = None
 
 class MovieDetails(BaseModel):
-    id:                 int
+    tmdb_id:            int = Field(alias="id")
     adult:              bool
     title:              str
     original_title:     str
@@ -139,7 +139,7 @@ class MovieDetails(BaseModel):
     updated_at:         Optional[datetime] = None
 
 class TVDetails(BaseModel):
-    id:                 int
+    tmdb_id:            int = Field(alias="id")
     adult:              bool
     name:               str
     original_name:      str
@@ -166,5 +166,3 @@ class TVDetails(BaseModel):
     spoken_languages:   List[SpokenLanguage]
     vote_average:       float
     vote_count:         int
-    created_at:         Optional[datetime] = None
-    updated_at:         Optional[datetime] = None
