@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     """OpenAI API and embedding model settings."""
     EMBEDDING_PROVIDER:              str  = "openai"
     OPENAI_EMBEDDING_MODEL:          str  = "text-embedding-3-small"
+    OPENAI_TOKEN_ENCODING:           str  = "cl100k_base"
     OPENAI_EMBEDDING_MAX_TOKENS:     int  = 8192
     OPENAI_EMBEDDING_MAX_RETRIES:    int  = 3
     OPENAI_EMBEDDING_BATCH_SIZE:     int  = 100
@@ -69,8 +70,8 @@ class Settings(BaseSettings):
     TV_TEXT_PATH:            str = "seasons.episodes.transcript_chunks.text"
 
     # Vector dimensions
-    MOVIE_NUM_DIMENSIONS:    int = 1536
-    TV_NUM_DIMENSIONS:       int = 1536
+    MOVIE_NUM_DIMENSIONS:    int = 1535
+    TV_NUM_DIMENSIONS:       int = 1535
 
     # Similarity metrics
     MOVIE_SIMILARITY:        str = "cosine"
@@ -93,9 +94,10 @@ class Settings(BaseSettings):
     """Text chunking and processing settings."""
     CHUNK_BREAKPOINT_TYPE:    Literal["percentile", "standard_deviation", "interquartile", "gradient"] = "percentile"
     CHUNK_BREAKPOINT_AMOUNT:  float = 95.0
-    CHUNK_SIZE:               Optional[int] = 8000
+    CHUNK_SIZE:               int = 2000 # The max is 8191
     CHUNK_BUFFER_SIZE:        int = 1
     MIN_CHUNK_WORDS:          int = 5
+    CHUNK_OVERLAP_PERCENT:    float = 0.15  # 15% overlap between chunks
 
     # ============= Caching Configuration =============
     """Cache settings for search results and other data."""
