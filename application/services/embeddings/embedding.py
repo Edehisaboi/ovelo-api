@@ -48,7 +48,7 @@ class EmbeddingService:
             return []
 
         try:
-            texts = [tc.text for tc in transcript_chunks]
+            texts = [tc.text.lower() for tc in transcript_chunks]
             embeddings = await self.get_embeddings(texts)
             
             return [
