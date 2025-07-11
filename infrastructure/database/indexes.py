@@ -60,7 +60,7 @@ class MongoIndex:
         """
         try:
             indexes = [
-                IndexModel([("id", ASCENDING)], unique=True, name="tmdb_id_unique"),
+                IndexModel([("tmdb_id", ASCENDING)], unique=True, name="tmdb_id_unique"),
                 IndexModel([("genres.name", ASCENDING)], name="genres_index"),
                 IndexModel([("spoken_languages.name", ASCENDING)], name="languages_index"),
                 IndexModel([("origin_country", ASCENDING)], name="country_index"),

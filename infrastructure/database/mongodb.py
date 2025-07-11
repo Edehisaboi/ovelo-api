@@ -13,7 +13,7 @@ from application.core.config import settings
 from external.clients import EmbeddingClient
 from application.core.logging import get_logger
 from application.models.media import MovieDetails, TVDetails
-from application.repositories.document import movie_document, tv_document
+from application.repositories import movie_document, tv_document
 
 from .indexes import MongoIndex
 
