@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict
 from datetime import datetime, date
 
@@ -7,14 +7,14 @@ class SearchResult(BaseModel):
     tmdb_id:        int = Field(alias="id")
     title:          Optional[str] = None  # For movies
     name:           Optional[str] = None   # For TV shows
-    overview:       str
+    overview:       Optional[str] = None
     poster_path:    Optional[str] = None
     backdrop_path:  Optional[str] = None
     media_type:     Optional[str] = None  # it's only provided for multi-search results
     release_date:   Optional[date | str] = None  # For movies
     first_air_date: Optional[date | str] = None  # For TV shows
-    vote_average:   float
-    vote_count:     int
+    vote_average:   Optional[float] = None
+    vote_count:     Optional[int] = None
 
 class SearchResults(BaseModel):
     page:           int
@@ -87,8 +87,15 @@ class Season(BaseModel):
     name:           str
     overview:       str
     season_number:  int
-    episode_count:  Optional[int] = None
-    episodes:       Optional[List['Episode']] = None
+    episode_count:  int
+    episodes:       List['Episode'] = Field(default_factory=list)
+
+    @field_validator('episode_count', mode='before')
+    def set_episode_count(cls, v, values):
+        if v is not None:
+            return v
+        episodes = values.get('episodes', [])
+        return len(episodes)
 
 
 class WatchProvider(BaseModel):
