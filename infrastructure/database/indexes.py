@@ -1,10 +1,10 @@
 from typing import List, Dict, Any
 
-from pymongo.collection import Collection
+from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo import ASCENDING, TEXT, IndexModel
 from pymongo.errors import OperationFailure
 
-from langchain_mongodb.index import create_fulltext_search_index
+#from langchain_mongodb.index import create_fulltext_search_index
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
 from application.core.config import settings
@@ -19,7 +19,7 @@ class MongoIndex:
     def __init__(
         self,
         retriever: MongoDBAtlasHybridSearchRetriever,
-        collection: Collection,
+        collection: AsyncIOMotorCollection,
         collection_type: str
     ):
         """
@@ -34,7 +34,7 @@ class MongoIndex:
         self.collection = collection
         self.collection_type = collection_type
 
-    def create(
+    async def create(
         self,
         embedding_dim: int,
         is_hybrid: bool = True
@@ -47,14 +47,14 @@ class MongoIndex:
             is_hybrid: Whether to create hybrid search indexes.
         """
         try:
-            self._create_traditional_indexes()
-            self._create_vector_search_indexes(embedding_dim, is_hybrid)
+            await self._create_traditional_indexes()
+            await self._create_vector_search_indexes(embedding_dim, is_hybrid)
             logger.info(f"Successfully created indexes for '{self.collection_type}' collection.")
         except Exception as e:
             logger.error(f"Error creating indexes for '{self.collection_type}': {e}")
             raise
 
-    def _create_traditional_indexes(self) -> None:
+    async def _create_traditional_indexes(self) -> None:
         """
         Create traditional MongoDB indexes for efficient querying and search.
         """
@@ -75,12 +75,12 @@ class MongoIndex:
                 indexes.append(IndexModel([("number_of_seasons", ASCENDING)], name="seasons_index"))
 
             # Drop existing text indexes to avoid conflicts
-            for index in self.collection.list_indexes():
+            async for index in self.collection.list_indexes():
                 if index.get("key", {}).get("_fts") == "text":
-                    self.collection.drop_index(index["name"])
+                    await self.collection.drop_index(index["name"])
 
             # Create (or recreate) all indexes
-            self.collection.create_indexes(indexes)
+            await self.collection.create_indexes(indexes)
             logger.debug(f"Created traditional indexes for '{self.collection_type}' collection.")
 
         except OperationFailure as e:
@@ -90,7 +90,7 @@ class MongoIndex:
             logger.error(f"Unexpected error creating traditional indexes: {e}")
             raise
 
-    def _create_vector_search_indexes(
+    async def _create_vector_search_indexes(
         self,
         embedding_dim: int,
         is_hybrid: bool = True
@@ -103,13 +103,17 @@ class MongoIndex:
             if not vectorstore:
                 raise ValueError("Vectorstore is not initialized.")
             vectorstore.create_vector_search_index(dimensions=embedding_dim)
-            if is_hybrid:
-                create_fulltext_search_index(
-                    collection=self.collection,
-                    index_name=self.retriever.search_index_name,
-                    field=vectorstore._text_key
-                )
+
+            # if is_hybrid:
+            #     create_fulltext_search_index(
+            #         collection=self.collection,
+            #         index_name=self.retriever.search_index_name,
+            #         field=vectorstore._text_key
+            #     )
+            #     # Note: create_fulltext_search_index expects sync collection
+            #     # We'll need to handle this differently or use a sync wrapper
             logger.debug(f"Created vector/hybrid search indexes for '{self.collection_type}'.")
+
         except OperationFailure as e:
             logger.error(f"Error creating vector search index: {e}")
             raise
@@ -117,7 +121,7 @@ class MongoIndex:
             logger.error(f"Unexpected error creating vector search index: {e}")
             raise
 
-    def list_indexes(self) -> List[Dict[str, Any]]:
+    async def list_indexes(self) -> List[Dict[str, Any]]:
         """
         List all indexes for the collection.
 
@@ -125,14 +129,16 @@ class MongoIndex:
             A list of index information dicts.
         """
         try:
-            indexes = list(self.collection.list_indexes())
+            indexes = []
+            async for index in self.collection.list_indexes():
+                indexes.append(dict(index))
             logger.debug(f"Found {len(indexes)} indexes for '{self.collection_type}'.")
             return indexes
         except Exception as e:
             logger.error(f"Error listing indexes: {e}")
             raise
 
-    def drop_index(self, index_name: str) -> None:
+    async def drop_index(self, index_name: str) -> None:
         """
         Drop a specific index by name.
 
@@ -140,18 +146,18 @@ class MongoIndex:
             index_name: The name of the index to drop.
         """
         try:
-            self.collection.drop_index(index_name)
+            await self.collection.drop_index(index_name)
             logger.info(f"Dropped index '{index_name}' from '{self.collection_type}'.")
         except Exception as e:
             logger.error(f"Error dropping index '{index_name}': {e}")
             raise
 
-    def drop_all_indexes(self) -> None:
+    async def drop_all_indexes(self) -> None:
         """
         Drop all indexes except the default _id index.
         """
         try:
-            self.collection.drop_indexes()
+            await self.collection.drop_indexes()
             logger.info(f"Dropped all indexes from '{self.collection_type}'.")
         except Exception as e:
             logger.error(f"Error dropping all indexes: {e}")

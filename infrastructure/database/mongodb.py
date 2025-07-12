@@ -3,8 +3,11 @@ from typing import Generic, Type, TypeVar, Optional
 from bson import ObjectId
 from pydantic import BaseModel
 
-from pymongo import MongoClient, errors
-from pymongo.collection import Collection
+from motor.motor_asyncio import (
+    AsyncIOMotorClient,
+    AsyncIOMotorCollection,
+    AsyncIOMotorDatabase
+)
 
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
@@ -17,57 +20,84 @@ from application.repositories import movie_document, tv_document
 
 from .indexes import MongoIndex
 
-logger = get_logger(__name__)
-T = TypeVar("T", bound=BaseModel)
+logger  = get_logger(__name__)
+T       = TypeVar("T", bound=BaseModel)
 
 
 class MongoClientWrapper(Generic[T]):
-    """
-    Service class for MongoDB operations, supporting ingestion, querying, and validation.
-    """
+    """Service class for MongoDB operations: ingestion, querying, and validation."""
 
     def __init__(
         self,
-        model:           Type[T],
-        collection_name: str,
-        database_name:   str,
-        mongodb_uri:     str,
-        embedding_client: "EmbeddingClient" = None
+        model:            Type[T],
+        collection_name:  str,
+        database_name:    str,
+        mongodb_uri:      str,
+        embedding_client: Optional[EmbeddingClient] = None
     ) -> None:
-        self.model           = model
-        self.collection_name = collection_name
-        self.database_name   = database_name
-        self.mongodb_uri     = mongodb_uri
-        self.embedding_client= embedding_client
-        self.retriever       : Optional[MongoDBAtlasHybridSearchRetriever] = None
-        self._is_closed      = False
+        self.model            = model
+        self.collection_name  = collection_name
+        self.database_name    = database_name
+        self.mongodb_uri      = mongodb_uri
+        self.embedding_client = embedding_client
 
+        self.retriever     :Optional[MongoDBAtlasHybridSearchRetriever] = None
+        self._is_closed    :bool = False
+        self.client        :AsyncIOMotorClient
+        self.database      :AsyncIOMotorDatabase
+        self.collection    :AsyncIOMotorCollection
+
+    async def _initialize_async(self) -> None:
+        """Initialize the async MongoDB connection."""
         try:
-            self.client = MongoClient(
-                mongodb_uri,
+            self.client = AsyncIOMotorClient(
+                self.mongodb_uri,
                 appname="moovzmatch",
                 serverSelectionTimeoutMS=5000,
                 connectTimeoutMS=5000,
                 socketTimeoutMS=5000,
             )
-            self.client.admin.command("ping")
+            await self.client.admin.command("ping")
+
+            self.database: AsyncIOMotorDatabase = self.client[self.database_name]
+            self.collection: AsyncIOMotorCollection = self.database[self.collection_name]
+            logger.info(
+                f"Connected to MongoDB instance:\n Database: {self.database_name}\n Collection: {self.collection_name}"
+            )
         except Exception as e:
             logger.error(f"Failed to initialize MongoDB connection: {e}")
             raise
 
-        self.database = self.client[database_name]
-        self.collection: Collection = self.database[collection_name]
-        logger.info(
-            f"Connected to MongoDB instance:\n Database: {database_name}\n Collection: {collection_name}"
-        )
+    async def close(self) -> None:
+        """Close the MongoDB connection."""
+        if not self._is_closed and self.client is not None:
+            try:
+                self.client.close()
+                self._is_closed = True
+                logger.debug("Closed MongoDB connection.")
+            except Exception as e:
+                logger.error(f"Error closing MongoDB connection: {e}")
 
-    def __enter__(self) -> "MongoClientWrapper":
+    async def is_connected(self) -> bool:
+        """Check if the MongoDB connection is still active."""
+        if self._is_closed or self.client is None:
+            return False
+        try:
+            await self.client.admin.command("ping")
+            return True
+        except Exception as e:
+            logger.error(f"Error checking MongoDB connection: {e}")
+            return False
+
+    def __enter__(self) -> "MongoClientWrapper[T]":
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        self.close()
+        if self.client is not None:
+            self.client.close()
+        self._is_closed = True
 
-    def initialize_indexes(self) -> None:
+    async def initialize_indexes(self) -> None:
         """Initialize all indexes and the hybrid search retriever."""
         try:
             if self.collection_name == settings.MOVIES_COLLECTION:
@@ -84,93 +114,33 @@ class MongoClientWrapper(Generic[T]):
                 similarity_metric   = settings.TV_SIMILARITY
 
             if not self.retriever:
-                self.retriever = self._get_hybrid_search_retriever(
+                self.retriever = await self._get_hybrid_search_retriever(
                     text_key        =text_path,
                     embedding_key   =embedding_path,
                     index_name      =index_name,
-                    similarity_metric=similarity_metric,
+                    similarity_metric=similarity_metric
                 )
 
-            MongoIndex(
+            mongo_index = MongoIndex(
                 retriever=self.retriever,
                 collection=self.collection,
                 collection_type=self.collection_name
-            ).create(
+            )
+            await mongo_index.create(
                 embedding_dim=embedding_dim,
-                is_hybrid=False # Mongo M0 free clusters have a limit of 3 search and vector indexes per cluster.
+                is_hybrid=False  # Mongo M0 free clusters: max 3 search/vector indexes per cluster
             )
         except Exception as e:
             logger.error(f"Error initializing indexes: {e}")
             raise
 
-    def clear_collection(self) -> None:
-        """Remove all documents from the collection."""
-        try:
-            result = self.collection.delete_many({})
-            logger.debug(
-                f"Cleared collection. Deleted {result.deleted_count} documents."
-            )
-        except errors.PyMongoError as e:
-            logger.error(f"Error clearing the collection: {e}")
-            raise
-
-    def ingest_document(self, document: T) -> str:
-        """Insert a single document into the MongoDB collection."""
-        try:
-            doc_dict = self._serialize_document(document)
-            result = self.collection.insert_one(doc_dict)
-            document_id = str(result.inserted_id)
-            logger.debug(f"Inserted document with ID: {document_id}")
-            return document_id
-        except errors.PyMongoError as e:
-            logger.error(f"Error inserting document: {e}")
-            raise
-
-    def update_document(self, document_id: str, document: T) -> bool:
-        """Update a document in the MongoDB collection."""
-        try:
-            doc_dict = self._serialize_document(document)
-            result = self.collection.update_one(
-                {"_id": ObjectId(document_id)},
-                {"$set": doc_dict}
-            )
-            if result.modified_count > 0:
-                logger.debug(f"Updated document with ID: {document_id}")
-                return True
-            else:
-                logger.warning(f"No document found with ID: {document_id}")
-                return False
-        except errors.PyMongoError as e:
-            logger.error(f"Error updating document: {e}")
-            raise
-
-    def get_collection_count(self) -> int:
-        """Return total number of documents in the collection."""
-        try:
-            return self.collection.count_documents({})
-        except errors.PyMongoError as e:
-            logger.error(f"Error counting documents in MongoDB: {e}")
-            raise
-
-    def _serialize_document(self, document: T) -> dict:
-        """Serialize a Pydantic document for insertion/update."""
-        if not isinstance(document, BaseModel):
-            raise ValueError("Document must be a Pydantic model instance.")
-
-        # Use specialized builder if applicable
-        if self.collection_name == settings.MOVIES_COLLECTION and isinstance(document, MovieDetails):
-            return movie_document.build(document)
-        elif self.collection_name == settings.TV_COLLECTION and isinstance(document, TVDetails):
-            return tv_document.build(document)
-        return document.model_dump()
-
-    def _get_hybrid_search_retriever(
+    async def _get_hybrid_search_retriever(
         self,
-        text_key:           str,
-        embedding_key:      str,
-        index_name:         str,
-        similarity_metric:  str,
-        k: int = settings.RAG_TOP_K
+        text_key:          str,
+        embedding_key:     str,
+        index_name:        str,
+        similarity_metric: str,
+        top_k:             int = settings.RAG_TOP_K
     ) -> MongoDBAtlasHybridSearchRetriever:
         """Get a hybrid search retriever for this collection."""
         if self.embedding_client is None or not self.embedding_client.embeddings:
@@ -189,27 +159,95 @@ class MongoClientWrapper(Generic[T]):
         return MongoDBAtlasHybridSearchRetriever(
             vectorstore=vectorstore,
             search_index_name=index_name,
-            top_k=k,
+            top_k=top_k,
             vector_penalty=settings.VECTOR_PENALTY,
             fulltext_penalty=settings.FULLTEXT_PENALTY
         )
 
-    def close(self) -> None:
-        """Close the MongoDB connection."""
-        if not self._is_closed:
-            try:
-                self.client.close()
-                self._is_closed = True
-                logger.debug("Closed MongoDB connection.")
-            except Exception as e:
-                logger.error(f"Error closing MongoDB connection: {e}")
-
-    def is_connected(self) -> bool:
-        """Check if the MongoDB connection is still active."""
-        if self._is_closed:
-            return False
+    async def clear_collection(self) -> None:
+        """Remove all documents from the collection."""
         try:
-            self.client.admin.command("ping")
-            return True
-        except errors.PyMongoError:
-            return False
+            result = await self.collection.delete_many({})
+            logger.debug(
+                f"Cleared collection. Deleted {result.deleted_count} documents."
+            )
+        except Exception as e:
+            logger.error(f"Error clearing the collection: {e}")
+            raise
+
+    async def get_collection_count(self) -> int:
+        """Return total number of documents in the collection."""
+        try:
+            return await self.collection.count_documents({})
+        except Exception as e:
+            logger.error(f"Error counting documents in MongoDB: {e}")
+            raise
+
+    async def ingest_document(self, document: T) -> str:
+        """Insert a single document into the MongoDB collection."""
+        try:
+            doc_dict = self._serialize_document(document)
+            result = await self.collection.insert_one(doc_dict)
+            document_id = str(result.inserted_id)
+            logger.debug(f"Inserted document with ID: {document_id}")
+            return document_id
+        except Exception as e:
+            logger.error(f"Error inserting document: {e}")
+            raise
+
+    async def update_document(self, document_id: str, document: T) -> bool:
+        """Update a document in the MongoDB collection."""
+        try:
+            doc_dict = self._serialize_document(document)
+            result = await self.collection.update_one(
+                {"_id": ObjectId(document_id)},
+                {"$set": doc_dict}
+            )
+            if result.modified_count > 0:
+                logger.debug(f"Updated document with ID: {document_id}")
+                return True
+            else:
+                logger.warning(f"No document found with ID: {document_id}")
+                return False
+        except Exception as e:
+            logger.error(f"Error updating document: {e}")
+            raise
+
+    async def model_exists(self, model_id: str) -> bool:
+        """Check if a document exists in the collection."""
+        try:
+            return await self.collection.find_one({"tmdb_id": model_id}) is not None
+        except Exception as e:
+            logger.error(f"Error checking if document exists: {e}")
+            raise
+
+    def _serialize_document(self, document: T) -> dict:
+        """Serialize a Pydantic document for insertion/update."""
+        if not isinstance(document, BaseModel):
+            raise ValueError("Document must be a Pydantic model instance.")
+
+        if self.collection_name == settings.MOVIES_COLLECTION and isinstance(document, MovieDetails):
+            return movie_document.build(document)
+        elif self.collection_name == settings.TV_COLLECTION and isinstance(document, TVDetails):
+            return tv_document.build(document)
+        return document.model_dump()
+
+
+
+async def create_mongo_client_wrapper(
+    model:            Type[T],
+    collection_name:  str,
+    database_name:    str,
+    mongodb_uri:      str,
+    embedding_client: Optional[EmbeddingClient] = None
+) -> "MongoClientWrapper[T]":
+    """Factory function to create and initialize a MongoClientWrapper."""
+    client = MongoClientWrapper(
+        model=model,
+        collection_name=collection_name,
+        database_name=database_name,
+        mongodb_uri=mongodb_uri,
+        embedding_client=embedding_client
+    )
+    await client._initialize_async()
+    return client

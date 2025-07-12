@@ -1,8 +1,6 @@
 from __future__ import annotations
 from typing import List, Dict, Tuple, Optional, Union
 
-from pymongo import errors
-
 from langchain_core.documents import Document
 
 from application.core.config import settings
@@ -13,14 +11,14 @@ from application.models.media import MovieDetails, TVDetails
 logger = get_logger(__name__)
 
 
-def search_by_title(
-    movie_db:   "MongoClientWrapper",
-    tv_db:      "MongoClientWrapper",
-    query:      str,
+async def search_by_title(
+    movie_db:   MongoClientWrapper,
+    tv_db:      MongoClientWrapper,
+    query:       str,
     exact_match: bool = False,
-    language:   Optional[str] = None,
-    country:    Optional[str] = None,
-    limit:      int = settings.MAX_RESULTS_PER_PAGE
+    language:    Optional[str] = None,
+    country:     Optional[str] = None,
+    limit:       int = settings.MAX_RESULTS_PER_PAGE
 ) -> Dict[str, List]:
     """
     Search both movies and TV shows collections using MongoDB's $unionWith aggregation.
@@ -71,6 +69,7 @@ def search_by_title(
             }
         })
 
+        # Add sorting and limiting
         if not exact_match:
             pipeline.append({"$sort": {"score": -1}})
         else:
@@ -86,10 +85,14 @@ def search_by_title(
                 }
             })
             pipeline.append({"$sort": {"sort_order": 1}})
+        
+        # Add limit stage
         pipeline.append({"$limit": limit})
 
-        # Execute the aggregation synchronously
-        results = list(movie_db.collection.aggregate(pipeline))
+        # Execute the aggregation asynchronously
+        results = []
+        async for result in movie_db.collection.aggregate(pipeline):
+            results.append(result)
 
         # Separate results into movies and tv_shows
         movies:     List[MovieDetails] = []
@@ -98,6 +101,14 @@ def search_by_title(
         for result in results:
             result.pop("score", None)
             result.pop("sort_order", None)
+            
+            #TODO: Fix field alias mismatch: convert watch_providers to watch/providers
+            if "watch_providers" in result:
+                result["watch/providers"] = result.pop("watch_providers")
+
+            if "tmdb_id" in result:
+                result["id"] = result.pop("tmdb_id")
+            
             if result.get("media_type") == "movie":
                 # Convert to MovieDetails object
                 try:
@@ -118,14 +129,14 @@ def search_by_title(
                     continue
         return {"movies": movies, "tv_shows": tv_shows}
 
-    except errors.PyMongoError as e:
+    except Exception as e:
         logger.error(f"Error searching both collections: {str(e)}")
         raise
 
-def vector_search(
-    mongodb: "MongoClientWrapper",
-    query: str,
-    limit: int = settings.MAX_RESULTS_PER_PAGE,
+async def vector_search(
+    mongodb: MongoClientWrapper,
+    query:   str,
+    limit:   int = settings.MAX_RESULTS_PER_PAGE,
     filter_criteria: Optional[Dict] = None
 ) -> Union[List[Tuple[Document, float]], List[Document]]:
     """
@@ -151,14 +162,14 @@ def vector_search(
 
         if vectorstore:
             # Returns List[Tuple[Document, float]]
-            documents = vectorstore.similarity_search_with_score(
+            documents = await vectorstore.asimilarity_search_with_score(
                 query=query,
                 k=limit,
                 pre_filter=filter_criteria
             )
         else:
             # Returns List[Document]
-            documents = retriever.invoke(query)
+            documents = await retriever.ainvoke(query)
 
         return documents
 
