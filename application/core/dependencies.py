@@ -7,12 +7,12 @@ from external.clients import (
     TMDbClient,
     EmbeddingClient,
     OpenAISTT,
-    RekognitionClient,
+    RekognitionClient
 )
 from application.utils.rate_limiter import RateLimiter
 from application.models import MovieDetails, TVDetails
 from application.core.logging import get_logger
-from infrastructure.database import MongoClientWrapper
+from infrastructure.database.mongodb import MongoClientWrapper, create_mongo_client_wrapper
 
 logger = get_logger(__name__)
 
@@ -22,107 +22,96 @@ def get_embedding_client() -> EmbeddingClient:
     """Return a singleton EmbeddingClient instance."""
     return EmbeddingClient()
 
-@lru_cache()
-def get_movie_db() -> MongoClientWrapper:
-    """Return a singleton movie database wrapper instance."""
-    try:
-        movie_db = MongoClientWrapper(
-            model=MovieDetails,
-            collection_name=settings.MOVIES_COLLECTION,
-            database_name=settings.MONGODB_DB,
-            mongodb_uri=settings.MONGODB_URL,
-            embedding_client=get_embedding_client(),
-        )
-        movie_db.initialize_indexes()
-        logger.info("Movie database connection initialized with indexes")
-        return movie_db
-    except Exception as e:
-        logger.error(f"Failed to initialize movie database: {e}")
-        raise
 
 @lru_cache()
-def get_tv_db() -> MongoClientWrapper:
-    """Return a singleton TV database wrapper instance."""
-    try:
-        tv_db = MongoClientWrapper(
-            model=TVDetails,
-            collection_name=settings.TV_COLLECTION,
-            database_name=settings.MONGODB_DB,
-            mongodb_uri=settings.MONGODB_URL,
-            embedding_client=get_embedding_client(),
+def get_tmdb_client() -> TMDbClient:
+    """Return a singleton TMDbClient instance."""
+    from application.utils.rate_limiter import RateLimitConfig
+    return TMDbClient(
+        api_key=settings.TMDB_API_KEY,
+        http_client=httpx.AsyncClient(),
+        base_url=settings.TMDB_BASE_URL,
+        rate_limiter=RateLimiter(
+            RateLimitConfig(
+                rate_limit=settings.TMDB_RATE_LIMIT,
+                rate_window=settings.TMDB_RATE_WINDOW,
+                enabled=settings.ENABLE_RATE_LIMITING
+            )
         )
-        tv_db.initialize_indexes()
-        logger.info("TV database connection initialized with indexes")
-        return tv_db
-    except Exception as e:
-        logger.error(f"Failed to initialize TV database: {e}")
-        raise
+    )
+
+
+@lru_cache()
+def get_opensubtitles_client() -> OpenSubtitlesClient:
+    """Return a singleton OpenSubtitlesClient instance."""
+    from application.utils.rate_limiter import RateLimitConfig
+    return OpenSubtitlesClient(
+        api_key=settings.OPENSUBTITLES_API_KEY,
+        http_client=httpx.AsyncClient(follow_redirects=True),
+        base_url=settings.OPENSUBTITLES_BASE_URL,
+        rate_limiter=RateLimiter(
+            RateLimitConfig(
+                rate_limit=settings.OPENSUBTITLES_RATE_LIMIT,
+                rate_window=settings.OPENSUBTITLES_RATE_WINDOW,
+                enabled=settings.ENABLE_RATE_LIMITING
+            )
+        )
+    )
 
 
 @lru_cache()
 def get_stt_client() -> OpenAISTT:
-    """Return a singleton OpenAI STT client instance."""
+    """Return a singleton OpenAISTT instance."""
     return OpenAISTT()
 
 
 @lru_cache()
-def get_tmdb_rate_limiter() -> RateLimiter:
-    """Return a singleton rate limiter for TMDb API."""
-    return RateLimiter.from_settings("tmdb")
-
-@lru_cache()
-def get_tmdb_client() -> TMDbClient:
-    """Return a singleton TMDb client instance."""
-    return TMDbClient(
-        api_key=settings.TMDB_API_KEY,
-        http_client=httpx.AsyncClient(),
-        rate_limiter=get_tmdb_rate_limiter(),
-        base_url=settings.TMDB_BASE_URL,
-    )
-
-
-@lru_cache()
-def get_opensubtitles_rate_limiter() -> RateLimiter:
-    """Return a singleton rate limiter for OpenSubtitles API."""
-    return RateLimiter.from_settings("opensubtitles")
-
-@lru_cache()
-def get_opensubtitles_client() -> OpenSubtitlesClient:
-    """Return a singleton OpenSubtitles client instance."""
-    return OpenSubtitlesClient(
-        api_key=settings.OPENSUBTITLES_API_KEY,
-        http_client=httpx.AsyncClient(follow_redirects=True),
-        rate_limiter=get_opensubtitles_rate_limiter(),
-        base_url=settings.OPENSUBTITLES_BASE_URL,
-    )
-
-
-@lru_cache()
 def get_rekognition_client() -> RekognitionClient:
-    """Return a singleton Rekognition client instance."""
+    """Return a singleton RekognitionClient instance."""
     return RekognitionClient()
 
 
-def close_database_connections():
-    """
-    Close all open MongoDB connections (movie and TV).
-    Safe to call even if connections are not initialized yet.
-    """
-    try:
-        movie_db = get_movie_db()
-        if movie_db:
-            movie_db.close()
-            logger.info("Movie database connection closed")
-    except Exception as e:
-        logger.warning(f"Error closing movie database: {e}")
+@lru_cache()
+async def get_movie_db() -> MongoClientWrapper:
+    """Return a singleton MongoClientWrapper instance for movies."""
+    client = await create_mongo_client_wrapper(
+        model=MovieDetails,
+        collection_name=settings.MOVIES_COLLECTION,
+        database_name=settings.MONGODB_DB,
+        mongodb_uri=settings.MONGODB_URL,
+        embedding_client=get_embedding_client()
+    )
+    await client.initialize_indexes()
+    return client
 
+
+@lru_cache()
+async def get_tv_db() -> MongoClientWrapper:
+    """Return a singleton MongoClientWrapper instance for TV shows."""
+    client = await create_mongo_client_wrapper(
+        model=TVDetails,
+        collection_name=settings.TV_COLLECTION,
+        database_name=settings.MONGODB_DB,
+        mongodb_uri=settings.MONGODB_URL,
+        embedding_client=get_embedding_client()
+    )
+    await client.initialize_indexes()
+    return client
+
+
+async def close_database_connections():
+    """Close all database connections."""
     try:
-        tv_db = get_tv_db()
-        if tv_db:
-            tv_db.close()
-            logger.info("TV database connection closed")
+        # Get instances and close them
+        movie_client = await get_movie_db()
+        tv_client = await get_tv_db()
+        
+        await movie_client.close()
+        await tv_client.close()
+        
+        logger.info("Database connections closed.")
     except Exception as e:
-        logger.warning(f"Error closing TV database: {e}")
+        logger.error(f"Error closing database connections: {e}")
 
 
 __all__ = [
@@ -136,10 +125,6 @@ __all__ = [
     "get_tmdb_client",
     "get_opensubtitles_client",
     "get_rekognition_client",
-
-    # Rate Limiters
-    "get_tmdb_rate_limiter",
-    "get_opensubtitles_rate_limiter",
 
     # Utility Functions
     "close_database_connections",
