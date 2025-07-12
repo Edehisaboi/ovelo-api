@@ -6,16 +6,40 @@ from application.models import (
     MovieDetails,
     TVDetails,
     SearchResults,
-    SearchResult,
+    SearchResult
 )
 from application.data.extract import Extractor
 from application.core.logging import get_logger
+from application.core.resources import movie_db, tv_db
 
 logger = get_logger(__name__)
+
+async def _exists_in_db(search_result: SearchResult) -> bool:
+    media_type = _determine_media_type(search_result)
+    tmdb_id = search_result.tmdb_id
+    if media_type == "movie":
+        movie_client = await movie_db()
+        return await movie_client.model_exists(tmdb_id)
+    elif media_type == "tv":
+        tv_client = await tv_db()
+        return await tv_client.model_exists(tmdb_id)
+    return False
+
+async def _process_search_result(search_result: SearchResult) -> Optional[Union[MovieDetails, TVDetails]]:
+    item_name = search_result.title or search_result.name or f"TMDB ID: {search_result.tmdb_id}"
+    if await _exists_in_db(search_result):
+        logger.info(f"Skipping existing item: {item_name} ID: {search_result.tmdb_id}")
+        return None
+    try:
+        return await _extract_media_details(search_result)
+    except Exception as exc:
+        logger.error(f"Failed to extract data for {item_name} ID: {search_result.tmdb_id}: {exc}")
+        return None
 
 
 async def generate_data(
     search_results: SearchResults,
+    max_items:  Optional[int] = None,
 ) -> AsyncGenerator[Union[MovieDetails, TVDetails], None]:
     """
     Generate enriched movie and TV show data from search results.
@@ -26,8 +50,9 @@ async def generate_data(
     Yields:
         Union[MovieDetails, TVDetails]: Enriched media data with transcript chunks
     """
+    results = search_results.results[:max_items] if max_items is not None else search_results.results
     progress_bar = tqdm(
-        search_results.results,
+        results,
         desc="Extracting enriched media data",
         unit="item",
         bar_format=(
@@ -43,19 +68,18 @@ async def generate_data(
         item_name = search_result.title or search_result.name or f"TMDB ID: {search_result.tmdb_id}"
         try:
             progress_bar.set_postfix_str(f"Processing: {item_name}")
-            enriched_media = await _extract_media_details(search_result)
+            enriched_media = await _process_search_result(search_result)
             if enriched_media:
                 progress_bar.set_postfix_str(f"✓ {item_name}")
                 yield enriched_media
             else:
-                progress_bar.set_postfix_str(f"✕ {item_name} (no data)")
+                progress_bar.set_postfix_str(f"Skipped/Failed: {item_name}")
         except Exception as exc:
-            logger.error(f"Failed to extract data for {item_name} (ID: {search_result.tmdb_id}): {exc}")
+            logger.error(f"Unexpected error for {item_name} ID: {search_result.tmdb_id}: {exc}")
             progress_bar.set_postfix_str(f"✕ {item_name} (error)")
-            continue
 
     progress_bar.close()
-    logger.info(f"Completed processing {len(search_results.results)} search results.")
+    logger.info(f"Completed processing {len(results)} search results.")
 
 
 async def _extract_media_details(
@@ -72,6 +96,7 @@ async def _extract_media_details(
     """
     try:
         media_type = _determine_media_type(search_result)
+
         if media_type == "movie":
             return await Extractor.extract_movie_data(search_result.tmdb_id)
         elif media_type == "tv":
@@ -111,6 +136,7 @@ async def generate_data_batch(
     search_results: SearchResults,
     batch_size: int = 5,
     max_concurrent: int = 3,
+    max_items: Optional[int] = None,
 ) -> AsyncGenerator[Union[MovieDetails, TVDetails], None]:
     """
     Generate enriched media data with concurrent processing in batches.
@@ -124,6 +150,8 @@ async def generate_data_batch(
         Union[MovieDetails, TVDetails]: Enriched media data with transcript chunks
     """
     total_items = len(search_results.results)
+    if max_items is not None:
+        total_items = min(total_items, max_items)
     progress_bar = tqdm(
         total=total_items,
         desc="Extracting enriched media data (concurrent)",
@@ -137,28 +165,27 @@ async def generate_data_batch(
         leave=True,
     )
 
-    for i in range(0, total_items, batch_size):
-        batch = search_results.results[i : i + batch_size]
+    results_to_process = search_results.results[:max_items] if max_items is not None else search_results.results
+
+    for i in range(0, len(results_to_process), batch_size):
+        batch = results_to_process[i : i + batch_size]
         semaphore = asyncio.Semaphore(max_concurrent)
 
         async def process_with_semaphore(result: SearchResult):
             async with semaphore:
-                return await _extract_media_details(result)
+                return await _process_search_result(result)
 
         tasks = [process_with_semaphore(result) for result in batch]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=False)  # Set to False to not yield exceptions
 
-        for j, result in enumerate(results):
+        for j, enriched in enumerate(results):
             item = batch[j]
             item_name = item.title or item.name or f"ID: {item.tmdb_id}"
-            if isinstance(result, Exception):
-                logger.error(f"Failed to extract data for {item_name}: {result}")
-                progress_bar.set_postfix_str(f"✕ {item_name}")
-            elif result is not None:
+            if enriched is not None:
                 progress_bar.set_postfix_str(f"✓ {item_name}")
-                yield result
+                yield enriched
             else:
-                progress_bar.set_postfix_str(f"✕ {item_name} (no data)")
+                progress_bar.set_postfix_str(f"Skipped/Failed: {item_name}")
             progress_bar.update(1)
 
     progress_bar.close()
