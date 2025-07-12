@@ -25,7 +25,7 @@ class SearchRequest(BaseModel):
     include_movies: bool = True
     include_tv:     bool = True
     exact_match:    bool = False
-    language:       Optional[str] = None
+    language:       Optional[str] = settings.TMDB_LANGUAGE
     country:        Optional[str] = None
 
 
@@ -51,7 +51,7 @@ async def search_media(
     logger.info(f"Searching for: {request.query}")
 
     try:
-        db_results = search_by_title(
+        db_results = await search_by_title(
             movie_db=movie_db_client,
             tv_db=tv_db_client,
             query=request.query,
@@ -95,10 +95,10 @@ async def search_media(
             # Compose empty or partial DB results, but always provide query and total_results for consistency
             return SearchResponse(
                 query=request.query,
-                movies=db_results["movies"],
-                tv_shows=db_results["tv_shows"],
+                movies=db_results["movies"] if db_results else [],
+                tv_shows=db_results["tv_shows"] if db_results else [],
                 tmdb_search=tmdb_results,
-                total_results=len(tmdb_results.results),
+                total_results=len(tmdb_results.results) if tmdb_results else 0,
             )
         except Exception as e:
             logger.error(f"Error searching TMDb API: {e}")
