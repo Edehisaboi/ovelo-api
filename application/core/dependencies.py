@@ -91,7 +91,7 @@ def get_opensubtitles_client() -> OpenSubtitlesClient:
     """Return a singleton OpenSubtitles client instance."""
     return OpenSubtitlesClient(
         api_key=settings.OPENSUBTITLES_API_KEY,
-        http_client=httpx.AsyncClient(),
+        http_client=httpx.AsyncClient(follow_redirects=True),
         rate_limiter=get_opensubtitles_rate_limiter(),
         base_url=settings.OPENSUBTITLES_BASE_URL,
     )
