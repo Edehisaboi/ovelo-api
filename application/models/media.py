@@ -4,7 +4,7 @@ from datetime import datetime, date
 
 
 class SearchResult(BaseModel):
-    id:             int
+    tmdb_id:        int = Field(alias="id")
     title:          Optional[str] = None  # For movies
     name:           Optional[str] = None   # For TV shows
     overview:       str
@@ -87,8 +87,8 @@ class Season(BaseModel):
     name:           str
     overview:       str
     season_number:  int
-    episode_count:  int
-    episodes:       List['Episode']
+    episode_count:  Optional[int] = None
+    episodes:       Optional[List['Episode']] = None
 
 
 class WatchProvider(BaseModel):
@@ -135,8 +135,6 @@ class MovieDetails(BaseModel):
     embedding_model:    Optional[str] = None
     vote_average:       float
     vote_count:         int
-    created_at:         Optional[datetime] = None
-    updated_at:         Optional[datetime] = None
 
 class TVDetails(BaseModel):
     tmdb_id:            int = Field(alias="id")
@@ -159,7 +157,7 @@ class TVDetails(BaseModel):
     images:             MovieImages
     videos:             MovieVideos
     watch_providers:    WatchProviders = Field(alias="watch/providers")
-    embedding_model:    str
+    embedding_model:    Optional[str] = None
     external_ids:       ExternalID
     origin_country:     List[str]
     original_language:  str
