@@ -35,14 +35,14 @@ class Settings(BaseSettings):
     TMDB_IMAGE_BASE_URL:     str = "https://image.tmdb.org/t/p"
     TMDB_LANGUAGE:           str = "en-US"
     TMDB_REGION:             str = "US"
-    TMDB_RATE_LIMIT:         int = 40
-    TMDB_RATE_WINDOW:        int = 10
+    TMDB_RATE_LIMIT:         int = 20
+    TMDB_RATE_WINDOW:        int = 1
 
     # ============= OpenSubtitles Configuration =============
     """OpenSubtitles API settings for subtitle data."""
     OPENSUBTITLES_BASE_URL:          str    = "https://api.opensubtitles.com/api/v1"
-    OPENSUBTITLES_RATE_LIMIT:        int    = 40
-    OPENSUBTITLES_RATE_WINDOW:       int    = 10
+    OPENSUBTITLES_RATE_LIMIT:        int    = 5
+    OPENSUBTITLES_RATE_WINDOW:       int    = 1
     OPENSUBTITLES_LANGUAGE:          str    = "en"
     OPENSUBTITLES_ORDER_BY:          str    = "download_count"
     OPENSUBTITLES_ORDER_DIRECTION:   str    = "desc"
@@ -119,9 +119,11 @@ class Settings(BaseSettings):
 
     # ============= Feature Flags =============
     """Feature flags to enable/disable specific functionality."""
-    INGESTION_ENABLED:       bool = False
+    INGESTION_ENABLED:       bool = True
     DEBUG_MODE:              bool = False
     ENABLE_RATE_LIMITING:    bool = True
+
+    MAX_INGESTION_ITEMS:    int = 1  # Maximum number of items to ingest per search
 
     # Pydantic settings
     model_config = SettingsConfigDict(
