@@ -58,8 +58,7 @@ class SearchService:
             episode_number:  Optional[int] = None,
             order_by:        Optional[str] = settings.OPENSUBTITLES_ORDER_BY,
             order_direction: Optional[str] = settings.OPENSUBTITLES_ORDER_DIRECTION,
-            language:        str = settings.OPENSUBTITLES_LANGUAGE,
-            trusted_sources: Optional[bool] = settings.OPENSUBTITLES_TRUSTED_SOURCES
+            language:        str = settings.OPENSUBTITLES_LANGUAGE
     ) -> Dict[str, Any]:
         """
         Build and return params dict for OpenSubtitles API, keeping languages first.
@@ -78,9 +77,7 @@ class SearchService:
             params["order_by"] = order_by
         if order_direction:
             params["order_direction"] = order_direction
-        if trusted_sources is not None:
-            # OpenSubtitles expects 'true'/'false' as string, not bool
-            params["trusted_sources"] = str(trusted_sources).lower()
+
         return params
     
     async def by_imdb(
@@ -90,9 +87,8 @@ class SearchService:
         season_number:      Optional[int] = None,
         episode_number:     Optional[int] = None,
         order_by:           Optional[str] = None,
-        order_direction:    Optional[str] = None,
-        trusted_sources:    Optional[bool] = None
-    ) -> SubtitleSearchResults:
+        order_direction:    Optional[str] = None
+    ) -> Optional[SubtitleSearchResult]:
         """Search subtitles by IMDb ID."""
         params = await self._build_params(
             id_key="imdb_id",
@@ -101,11 +97,10 @@ class SearchService:
             season_number=season_number,
             episode_number=episode_number,
             order_by=order_by,
-            order_direction=order_direction,
-            trusted_sources=trusted_sources
+            order_direction=order_direction
         )
-        data = await self._client.get("/subtitles", params)
-        return SubtitleSearchResults(**data)
+        raw_json = await self._client.get("/subtitles", params)
+        return self._get_most_downloaded_subtitle(raw_json)
     
     async def by_tmdb(
         self,
@@ -114,8 +109,7 @@ class SearchService:
         season_number:     Optional[int] = None,
         episode_number:    Optional[int] = None,
         order_by:          Optional[str] = None,
-        order_direction:   Optional[str] = None,
-        trusted_sources:   Optional[bool] = None
+        order_direction:   Optional[str] = None
     ) -> Optional[SubtitleSearchResult]:
         """Search subtitles by TMDb ID."""
         params = await self._build_params(
@@ -125,14 +119,10 @@ class SearchService:
             season_number=season_number,
             episode_number=episode_number,
             order_by=order_by,
-            order_direction=order_direction,
-            trusted_sources=trusted_sources
+            order_direction=order_direction
         )
-        data = await self._client.get("/subtitles", params)
-        search_results =  SubtitleSearchResults(**data)
-        if search_results.results:
-            return search_results.results[0]
-        return None  # No subtitles found
+        raw_json = await self._client.get("/subtitles", params)
+        return self._get_most_downloaded_subtitle(raw_json)
 
     async def by_parent(
             self,
@@ -142,8 +132,7 @@ class SearchService:
             season_number:   Optional[int] = None,
             episode_number:  Optional[int] = None,
             order_by:        Optional[str] = None,
-            order_direction: Optional[str] = None,
-            trusted_sources: Optional[bool] = None
+            order_direction: Optional[str] = None
     ) -> Optional[SubtitleSearchResult]:
         """Search subtitles by parent ID (for TV shows)"""
         param_key = f"parent_{parent_type.lower()}_id"
@@ -154,14 +143,10 @@ class SearchService:
             season_number=season_number,
             episode_number=episode_number,
             order_by=order_by,
-            order_direction=order_direction,
-            trusted_sources=trusted_sources
+            order_direction=order_direction
         )
-        data = await self._client.get("/subtitles", params)
-        search_results = SubtitleSearchResults(**data)
-        if search_results.results:
-            return search_results.results[0]  # Return only the first/best result
-        return None  # No subtitles found
+        raw_json = await self._client.get("/subtitles", params)
+        return self._get_most_downloaded_subtitle(raw_json)
 
     async def all_parent_search(
             self,
@@ -186,6 +171,26 @@ class SearchService:
                 )
 
         return await asyncio.gather(*tasks)
+
+    @staticmethod
+    def _get_most_downloaded_subtitle(
+        data: dict
+    ) -> Optional[SubtitleSearchResult]:
+        """
+           Returns the SubtitleSearchResult with the highest download_count from the provided API data.
+           """
+        search_results = SubtitleSearchResults(**data)
+        if not search_results.results:
+            return None
+
+        # Find the SubtitleSearchResult with the highest download_count
+        most_downloaded = max(
+            search_results.results,
+            key=lambda x: x.attributes.download_count,
+            default=None
+        )
+        return most_downloaded
+
 
 
 class SubtitlesService:

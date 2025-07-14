@@ -46,7 +46,6 @@ class Settings(BaseSettings):
     OPENSUBTITLES_LANGUAGE:          str    = "en"
     OPENSUBTITLES_ORDER_BY:          str    = "download_count"
     OPENSUBTITLES_ORDER_DIRECTION:   str    = "desc"
-    OPENSUBTITLES_TRUSTED_SOURCES:   str    = "include"
 
     # ============= MongoDB Configuration =============
     """MongoDB database connection and collection settings."""
