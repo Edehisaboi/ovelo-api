@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     TMDB_REGION:             str = "US"
     TMDB_RATE_LIMIT:         int = 20
     TMDB_RATE_WINDOW:        int = 1
+    TMDB_ALLOWED_LANGUAGE:   str = "en"
 
     # ============= OpenSubtitles Configuration =============
     """OpenSubtitles API settings for subtitle data."""

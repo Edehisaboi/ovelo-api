@@ -35,21 +35,37 @@ def _determine_media_type(
     return None
 
 
-async def _exists_in_db(
+async def _should_skip_media(
     manager,
     search_result: SearchResult,
 ) -> bool:
     """
-    Check if a media item already exists in the database.
-    Uses the provided mongo manager instance.
+    Determines if a media item should be skipped during processing.
+
+    Returns True if:
+      - The item already exists in the database, OR
+      - The item does NOT exist, but its original_language is not allowed.
+
+    Returns False only if:
+      - The item does not exist AND its language is allowed (should be processed).
     """
     media_type = _determine_media_type(search_result)
     tmdb_id = str(search_result.tmdb_id)
+
+    exists = False
     if media_type == "movie":
-        return await manager.model_exists(tmdb_id, settings.MOVIES_COLLECTION)
+        exists = await manager.model_exists(tmdb_id, settings.MOVIES_COLLECTION)
     elif media_type == "tv":
-        return await manager.model_exists(tmdb_id, settings.TV_COLLECTION)
-    return False
+        exists = await manager.model_exists(tmdb_id, settings.TV_COLLECTION)
+
+    if exists:
+        return True
+
+    # Not in database; check language
+    if search_result.original_language != settings.TMDB_ALLOWED_LANGUAGE:
+        return True  # Not allowed, skip
+
+    return False  # Does not exist, and language allowed; process it
 
 
 async def _extract_media_details(
@@ -80,7 +96,7 @@ async def _process_search_result(
     Uses the provided mongo manager.
     """
     item_name = search_result.title or search_result.name or f"TMDB ID: {search_result.tmdb_id}"
-    if await _exists_in_db(manager, search_result):
+    if await _should_skip_media(manager, search_result):
         logger.info(f"Skipping existing item: {item_name} ID: {search_result.tmdb_id}")
         return None
     try:
