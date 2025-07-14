@@ -1,253 +1,327 @@
-from typing import Generic, Type, TypeVar, Optional
+import asyncio
+from typing import TypeVar, Optional, Dict, Type
 
-from bson import ObjectId
+from typing_extensions import Self
 from pydantic import BaseModel
-
-from motor.motor_asyncio import (
-    AsyncIOMotorClient,
-    AsyncIOMotorCollection,
-    AsyncIOMotorDatabase
-)
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
 from application.core.config import settings
-from external.clients import EmbeddingClient
 from application.core.logging import get_logger
 from application.models.media import MovieDetails, TVDetails
-from application.repositories import movie_document, tv_document
+from application.utils.document import extract_movie_collections, extract_tv_collections
+from external.clients import EmbeddingClient
+from infrastructure.database.collection import CollectionWrapper
+from infrastructure.database.indexes import MongoIndex
 
-from .indexes import MongoIndex
-
-logger  = get_logger(__name__)
-T       = TypeVar("T", bound=BaseModel)
+logger = get_logger(__name__)
+T = TypeVar("T", bound=BaseModel)
 
 
-class MongoClientWrapper(Generic[T]):
-    """Service class for MongoDB operations: ingestion, querying, and validation."""
+class MongoCollectionsManager:
+    """
+    Central manager for all MongoDB collections with property-based API, including vector retrievers.
+    Use as an async context manager.
+    """
 
     def __init__(
         self,
-        model:            Type[T],
-        collection_name:  str,
-        database_name:    str,
-        mongodb_uri:      str,
-        embedding_client: Optional[EmbeddingClient] = None
-    ) -> None:
-        self.model            = model
-        self.collection_name  = collection_name
+        mongodb_uri:        str,
+        database_name:      str,
+        embedding_client:   Optional[EmbeddingClient] = None
+    ):
         self.database_name    = database_name
         self.mongodb_uri      = mongodb_uri
         self.embedding_client = embedding_client
 
-        self.retriever     :Optional[MongoDBAtlasHybridSearchRetriever] = None
-        self._is_closed    :bool = False
-        self.client        :AsyncIOMotorClient
-        self.database      :AsyncIOMotorDatabase
-        self.collection    :AsyncIOMotorCollection
+        self.client                 : Optional[AsyncIOMotorClient] = None
+        self.database               : Optional[AsyncIOMotorDatabase] = None
+        self._collection_wrappers   : Dict[str, CollectionWrapper] = {}
+        self._retrievers            : Dict[str, MongoDBAtlasHybridSearchRetriever] = {}
+        self._is_initialized        = False
 
-    async def _initialize_async(self) -> None:
-        """Initialize the async MongoDB connection."""
-        try:
-            self.client = AsyncIOMotorClient(
-                self.mongodb_uri,
-                appname="moovzmatch",
-                serverSelectionTimeoutMS=5000,
-                connectTimeoutMS=5000,
-                socketTimeoutMS=5000,
-            )
-            await self.client.admin.command("ping")
-
-            self.database: AsyncIOMotorDatabase = self.client[self.database_name]
-            self.collection: AsyncIOMotorCollection = self.database[self.collection_name]
-            logger.info(
-                f"Connected to MongoDB instance:\n Database: {self.database_name}\n Collection: {self.collection_name}"
-            )
-        except Exception as e:
-            logger.error(f"Failed to initialize MongoDB connection: {e}")
-            raise
-
-    async def close(self) -> None:
-        """Close the MongoDB connection."""
-        if not self._is_closed and self.client is not None:
-            try:
-                self.client.close()
-                self._is_closed = True
-                logger.debug("Closed MongoDB connection.")
-            except Exception as e:
-                logger.error(f"Error closing MongoDB connection: {e}")
-
-    async def is_connected(self) -> bool:
-        """Check if the MongoDB connection is still active."""
-        if self._is_closed or self.client is None:
-            return False
-        try:
-            await self.client.admin.command("ping")
-            return True
-        except Exception as e:
-            logger.error(f"Error checking MongoDB connection: {e}")
-            return False
-
-    def __enter__(self) -> "MongoClientWrapper[T]":
+    async def __aenter__(self) -> Self:
+        await self.initialize()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        if self.client is not None:
-            self.client.close()
-        self._is_closed = True
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
 
-    async def initialize_indexes(self) -> None:
-        """Initialize all indexes and the hybrid search retriever."""
-        try:
-            if self.collection_name == settings.MOVIES_COLLECTION:
-                embedding_dim       = settings.MOVIE_NUM_DIMENSIONS
-                index_name          = settings.MOVIE_INDEX_NAME
-                text_path           = settings.MOVIE_TEXT_PATH
-                embedding_path      = settings.MOVIE_EMBEDDING_PATH
-                similarity_metric   = settings.MOVIE_SIMILARITY
-            else:
-                embedding_dim       = settings.TV_NUM_DIMENSIONS
-                index_name          = settings.TV_INDEX_NAME
-                text_path           = settings.TV_TEXT_PATH
-                embedding_path      = settings.TV_EMBEDDING_PATH
-                similarity_metric   = settings.TV_SIMILARITY
+    async def initialize(self) -> Self:
+        if self._is_initialized:
+            return self
 
-            if not self.retriever:
-                self.retriever = await self._get_hybrid_search_retriever(
-                    text_key        =text_path,
-                    embedding_key   =embedding_path,
-                    index_name      =index_name,
-                    similarity_metric=similarity_metric
+        self.client = AsyncIOMotorClient(
+            self.mongodb_uri,
+            appname="moovzmatch",
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            socketTimeoutMS=5000,
+        )
+        await self.client.admin.command("ping")
+
+        self.database = self.client[self.database_name]
+        logger.info(f"Connected to MongoDB database: {self.database_name}")
+
+        self._initialize_collection_wrappers()
+        await self._initialize_retrievers()
+
+        self._is_initialized = True
+        return self
+
+    async def initialize_all_indexes(self):
+        """
+        Initialize traditional and vector/hybrid search indexes for all managed collections.
+        """
+        async def run_init(
+            collection_wrapper  : CollectionWrapper,
+            collection_type     : str,
+            embedding_dim       : Optional[int] = None,
+            retriever           : Optional[MongoDBAtlasHybridSearchRetriever] = None,
+        ):
+            try:
+                indexer = MongoIndex(
+                    retriever=retriever,
+                    collection=collection_wrapper.collection,
+                    collection_type=collection_type
                 )
+                if embedding_dim and retriever:
+                    await indexer.create_vector_search_indexes(embedding_dim=embedding_dim)
+                else:
+                    await indexer.create_traditional_indexes()
+                logger.info(f"Indexes initialized for '{collection_type}'.")
+            except Exception as e:
+                logger.error(f"Failed to initialize indexes for '{collection_type}': {e}")
 
-            mongo_index = MongoIndex(
-                retriever=self.retriever,
-                collection=self.collection,
-                collection_type=self.collection_name
+        tasks = [
+            run_init(
+                self.movies,
+                settings.MOVIES_COLLECTION
+            ),
+            run_init(
+                self.movie_chunks,
+                settings.MOVIE_CHUNKS_COLLECTION,
+                embedding_dim=settings.MOVIE_NUM_DIMENSIONS,
+                retriever=self.movie_chunks_retriever
+            ),
+            run_init(
+                self.tv_shows,
+                settings.TV_COLLECTION
+            ),
+            run_init(
+                self.tv_chunks,
+                settings.TV_CHUNKS_COLLECTION,
+                embedding_dim=settings.TV_NUM_DIMENSIONS,
+                retriever=self.tv_chunks_retriever
             )
-            await mongo_index.create(
-                embedding_dim=embedding_dim,
-                is_hybrid=False  # Mongo M0 free clusters: max 3 search/vector indexes per cluster
-            )
-        except Exception as e:
-            logger.error(f"Error initializing indexes: {e}")
-            raise
+        ]
+        await asyncio.gather(*tasks)
+        logger.info("All collection indexes initialized.")
 
-    async def _get_hybrid_search_retriever(
-        self,
-        text_key:          str,
-        embedding_key:     str,
-        index_name:        str,
-        similarity_metric: str,
-        top_k:             int = settings.RAG_TOP_K
-    ) -> MongoDBAtlasHybridSearchRetriever:
-        """Get a hybrid search retriever for this collection."""
-        if self.embedding_client is None or not self.embedding_client.embeddings:
-            raise RuntimeError(
-                "Embedding client is not initialized. "
-                "Pass an embedding_client instance to MongoClientWrapper."
+    def _initialize_collection_wrappers(self):
+        """Initialize all collection wrappers using a helper to avoid duplication."""
+
+        def add_wrapper(key: str, model: Type):
+            self._collection_wrappers[key] = CollectionWrapper(
+                model=model,
+                collection=self.database[key],
+                collection_name=key
             )
-        vectorstore = MongoDBAtlasVectorSearch.from_connection_string(
-            connection_string=self.mongodb_uri,
-            embedding=self.embedding_client.embeddings,
-            namespace=f"{self.database_name}.{self.collection_name}",
-            text_key=text_key,
-            embedding_key=embedding_key,
-            relevance_score_fn=similarity_metric,
+
+        # Movie-related collections
+        add_wrapper(settings.MOVIES_COLLECTION, MovieDetails)
+        add_wrapper(settings.MOVIE_CHUNKS_COLLECTION, dict)
+        add_wrapper(settings.MOVIE_WATCH_PROVIDERS_COLLECTION, dict)
+        # TV-related collections
+        add_wrapper(settings.TV_COLLECTION, TVDetails)
+        add_wrapper(settings.TV_SEASONS_COLLECTION, dict)
+        add_wrapper(settings.TV_EPISODES_COLLECTION, dict)
+        add_wrapper(settings.TV_CHUNKS_COLLECTION, dict)
+        add_wrapper(settings.TV_WATCH_PROVIDERS_COLLECTION, dict)
+
+    async def _initialize_retrievers(self):
+        """Initialize vector/hybrid search retrievers for chunk collections."""
+        if not self.embedding_client or not self.embedding_client.embeddings:
+            logger.warning("Embedding client not configured. Skipping retriever setup.")
+            return
+
+        async def set_retriever(collection_name, text_key, embedding_key, index_name, similarity_metric, top_k):
+            vectorstore = MongoDBAtlasVectorSearch.from_connection_string(
+                connection_string   = self.mongodb_uri,
+                embedding           = self.embedding_client.embeddings,
+                namespace           = f"{self.database_name}.{collection_name}",
+                text_key            = text_key,
+                embedding_key       = embedding_key,
+                relevance_score_fn  = similarity_metric,
+            )
+            self._retrievers[collection_name] = MongoDBAtlasHybridSearchRetriever(
+                vectorstore=vectorstore,
+                search_index_name=index_name,
+                top_k=top_k,
+                vector_penalty=settings.VECTOR_PENALTY,
+                fulltext_penalty=settings.FULLTEXT_PENALTY
+            )
+
+        await asyncio.gather(
+            set_retriever(
+                settings.MOVIE_CHUNKS_COLLECTION,
+                settings.MOVIE_TEXT_PATH,
+                settings.MOVIE_EMBEDDING_PATH,
+                settings.MOVIE_INDEX_NAME,
+                settings.MOVIE_SIMILARITY,
+                settings.RAG_TOP_K
+            ),
+            set_retriever(
+                settings.TV_CHUNKS_COLLECTION,
+                settings.TV_TEXT_PATH,
+                settings.TV_EMBEDDING_PATH,
+                settings.TV_INDEX_NAME,
+                settings.TV_SIMILARITY,
+                settings.RAG_TOP_K
+            )
         )
-        return MongoDBAtlasHybridSearchRetriever(
-            vectorstore=vectorstore,
-            search_index_name=index_name,
-            top_k=top_k,
-            vector_penalty=settings.VECTOR_PENALTY,
-            fulltext_penalty=settings.FULLTEXT_PENALTY
+
+    async def close(self):
+        """Close the MongoDB connection."""
+        if self.client:
+            self.client.close()
+            self._is_initialized = False
+            logger.debug("Closed MongoDB connection.")
+
+
+    @property
+    def movies(self) -> CollectionWrapper[MovieDetails]:
+        return self._collection_wrappers[settings.MOVIES_COLLECTION]
+
+    @property
+    def movie_chunks(self) -> CollectionWrapper:
+        return self._collection_wrappers[settings.MOVIE_CHUNKS_COLLECTION]
+
+    @property
+    def movie_watch_providers(self) -> CollectionWrapper:
+        return self._collection_wrappers[settings.MOVIE_WATCH_PROVIDERS_COLLECTION]
+
+    @property
+    def tv_shows(self) -> CollectionWrapper[TVDetails]:
+        return self._collection_wrappers[settings.TV_COLLECTION]
+
+    @property
+    def tv_seasons(self) -> CollectionWrapper:
+        return self._collection_wrappers[settings.TV_SEASONS_COLLECTION]
+
+    @property
+    def tv_episodes(self) -> CollectionWrapper:
+        return self._collection_wrappers[settings.TV_EPISODES_COLLECTION]
+
+    @property
+    def tv_chunks(self) -> CollectionWrapper:
+        return self._collection_wrappers[settings.TV_CHUNKS_COLLECTION]
+
+    @property
+    def tv_watch_providers(self) -> CollectionWrapper:
+        return self._collection_wrappers[settings.TV_WATCH_PROVIDERS_COLLECTION]
+
+    # --- Properties for Retriever Access ---
+    @property
+    def movie_chunks_retriever(self) -> Optional[MongoDBAtlasHybridSearchRetriever]:
+        return self._retrievers.get(settings.MOVIE_CHUNKS_COLLECTION)
+
+    @property
+    def tv_chunks_retriever(self) -> Optional[MongoDBAtlasHybridSearchRetriever]:
+        return self._retrievers.get(settings.TV_CHUNKS_COLLECTION)
+
+    # --- High-Level Normalized Data Insertion ---
+    async def insert_movie_document(self, movie: MovieDetails) -> str:
+        """Insert a movie and all related data into normalized collections."""
+        collections = extract_movie_collections(movie)
+        movie_id = await self.movies.insert_one(
+            collections[settings.MOVIES_COLLECTION]
         )
 
-    async def clear_collection(self) -> None:
-        """Remove all documents from the collection."""
-        try:
-            result = await self.collection.delete_many({})
-            logger.debug(
-                f"Cleared collection. Deleted {result.deleted_count} documents."
-            )
-        except Exception as e:
-            logger.error(f"Error clearing the collection: {e}")
-            raise
+        # Movie chunks
+        chunks = collections[settings.MOVIE_CHUNKS_COLLECTION]
+        if chunks:
+            for chunk in chunks:
+                chunk["movie_id"] = movie_id
+            await self.movie_chunks.insert_many(chunks)
 
-    async def get_collection_count(self) -> int:
-        """Return total number of documents in the collection."""
-        try:
-            return await self.collection.count_documents({})
-        except Exception as e:
-            logger.error(f"Error counting documents in MongoDB: {e}")
-            raise
+        # Movie watch providers
+        watch_providers = collections[settings.MOVIE_WATCH_PROVIDERS_COLLECTION]
+        if watch_providers:
+            watch_providers["movie_id"] = movie_id
+            await self.movie_watch_providers.insert_one(watch_providers)
 
-    async def ingest_document(self, document: T) -> str:
-        """Insert a single document into the MongoDB collection."""
-        try:
-            doc_dict = self._serialize_document(document)
-            result = await self.collection.insert_one(doc_dict)
-            document_id = str(result.inserted_id)
-            logger.debug(f"Inserted document with ID: {document_id}")
-            return document_id
-        except Exception as e:
-            logger.error(f"Error inserting document: {e}")
-            raise
+        logger.info(f"Inserted normalized movie data for ID: {movie_id}")
+        return movie_id
 
-    async def update_document(self, document_id: str, document: T) -> bool:
-        """Update a document in the MongoDB collection."""
-        try:
-            doc_dict = self._serialize_document(document)
-            result = await self.collection.update_one(
-                {"_id": ObjectId(document_id)},
-                {"$set": doc_dict}
-            )
-            if result.modified_count > 0:
-                logger.debug(f"Updated document with ID: {document_id}")
-                return True
-            else:
-                logger.warning(f"No document found with ID: {document_id}")
-                return False
-        except Exception as e:
-            logger.error(f"Error updating document: {e}")
-            raise
+    async def insert_tv_show_document(self, tv_show: TVDetails) -> str:
+        """Insert a TV show and all related data into normalized collections."""
+        collections = extract_tv_collections(tv_show)
+        tv_show_id = await self.tv_shows.insert_one(
+            collections[settings.TV_COLLECTION]
+        )
 
-    async def model_exists(self, model_id: str) -> bool:
-        """Check if a document exists in the collection."""
-        try:
-            return await self.collection.find_one({"tmdb_id": model_id}) is not None
-        except Exception as e:
-            logger.error(f"Error checking if document exists: {e}")
-            raise
+        # Insert seasons and build mapping: (season_number → season_id)
+        season_number_to_id = {}
+        for season in collections[settings.TV_SEASONS_COLLECTION]:
+            season["tv_show_id"] = tv_show_id
+            season_id = await self.tv_seasons.insert_one(season)
+            season_number_to_id[season["season_number"]] = season_id
 
-    def _serialize_document(self, document: T) -> dict:
-        """Serialize a Pydantic document for insertion/update."""
-        if not isinstance(document, BaseModel):
-            raise ValueError("Document must be a Pydantic model instance.")
+        # Insert episodes and build mapping: (season_number, episode_number) → episode_id
+        episode_keys_to_id = {}
+        for episode in collections[settings.TV_EPISODES_COLLECTION]:
+            season_id = season_number_to_id[episode["season_number"]]
+            episode["tv_show_id"] = tv_show_id
+            episode["season_id"] = season_id
+            episode_id = await self.tv_episodes.insert_one(episode)
+            episode_keys_to_id[(episode["season_number"], episode["episode_number"])] = episode_id
 
-        if self.collection_name == settings.MOVIES_COLLECTION and isinstance(document, MovieDetails):
-            return movie_document.build(document)
-        elif self.collection_name == settings.TV_COLLECTION and isinstance(document, TVDetails):
-            return tv_document.build(document)
-        return document.model_dump()
+        # Insert episode chunks
+        for chunk in collections[settings.TV_CHUNKS_COLLECTION]:
+            ep_key = (chunk["season_number"], chunk["episode_number"])
+            episode_id = episode_keys_to_id.get(ep_key)
+            if episode_id:
+                chunk["episode_id"] = episode_id
+                await self.tv_chunks.insert_one(chunk)
+
+        # TV watch providers
+        watch_providers = collections[settings.TV_WATCH_PROVIDERS_COLLECTION]
+        if watch_providers:
+            watch_providers["tv_show_id"] = tv_show_id
+            await self.tv_watch_providers.insert_one(watch_providers)
+
+        logger.info(f"Inserted normalized TV show data for ID: {tv_show_id}")
+        return tv_show_id
+
+    async def model_exists(self, model_id: str, collection_name: str) -> bool:
+        """Check if a document exists in the specified collection."""
+        return await self._collection_wrappers[collection_name].find_one({"tmdb_id": model_id}) is not None
 
 
 
-async def create_mongo_client_wrapper(
-    model:            Type[T],
-    collection_name:  str,
-    database_name:    str,
-    mongodb_uri:      str,
-    embedding_client: Optional[EmbeddingClient] = None
-) -> "MongoClientWrapper[T]":
-    """Factory function to create and initialize a MongoClientWrapper."""
-    client = MongoClientWrapper(
-        model=model,
-        collection_name=collection_name,
+async def create_mongo_collections_manager(
+    database_name:      str = settings.MONGODB_DB,
+    mongodb_uri:        str = settings.MONGODB_URL,
+    embedding_client:   Optional[EmbeddingClient] = None,
+    initialize_indexes: bool = True
+) -> MongoCollectionsManager:
+    """
+    Factory function to create and initialize a MongoCollectionsManager.
+    Usage:
+        async with create_mongo_collections_manager(..., initialize_indexes=True) as manager:
+            ...
+    """
+    manager = MongoCollectionsManager(
         database_name=database_name,
         mongodb_uri=mongodb_uri,
         embedding_client=embedding_client
     )
-    await client._initialize_async()
-    return client
+    await manager.initialize()
+
+    if initialize_indexes:
+        await manager.initialize_all_indexes()
+
+    return manager
