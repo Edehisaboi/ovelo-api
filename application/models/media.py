@@ -4,21 +4,22 @@ from datetime import datetime, date
 
 
 class SearchResult(BaseModel):
-    tmdb_id:        int = Field(alias="id")
-    title:          Optional[str] = None  # For movies
-    name:           Optional[str] = None   # For TV shows
-    overview:       Optional[str] = None
-    poster_path:    Optional[str] = None
-    backdrop_path:  Optional[str] = None
-    media_type:     Optional[str] = None  # it's only provided for multi-search results
-    release_date:   Optional[str | date] = None  # For movies
-    first_air_date: Optional[str | date] = None  # For TV shows
-    vote_average:   Optional[float] = None
-    vote_count:     Optional[int] = None
+    tmdb_id:            int = Field(alias="id")
+    title:              Optional[str] = None  # For movies
+    name:               Optional[str] = None   # For TV shows
+    overview:           Optional[str] = None
+    poster_path:        Optional[str] = None
+    backdrop_path:      Optional[str] = None
+    media_type:         Optional[str] = None  # it's only provided for multi-search results
+    release_date:       Optional[str | date] = None  # For movies
+    first_air_date:     Optional[str | date] = None  # For TV shows
+    vote_average:       Optional[float] = None
+    vote_count:         Optional[int] = None
+    original_language:  Optional[str] = None
 
 class SearchResults(BaseModel):
     page:           int
-    results:        List[SearchResult]
+    results:        List[SearchResult | None]
     total_pages:    int
     total_results:  int
 
