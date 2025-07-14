@@ -8,11 +8,11 @@ from application.models import (
     MovieDetails,
     TVDetails,
     SearchResults,
-    SearchResult,
+    SearchResult
 )
 from application.data.extract import Extractor
 from application.core.logging import get_logger
-from application.core.resources import movie_db, tv_db
+from application.core.resources import mongo_manager
 
 logger = get_logger(__name__)
 
@@ -52,14 +52,14 @@ async def _exists_in_db(search_result: SearchResult) -> bool:
         bool: True if exists, else False
     """
     media_type = _determine_media_type(search_result)
-    tmdb_id = search_result.tmdb_id
+    tmdb_id = str(search_result.tmdb_id)
 
     if media_type == "movie":
-        movie_client = await movie_db()
-        return await movie_client.model_exists(tmdb_id)
+        manager = await mongo_manager()
+        return await manager.model_exists(tmdb_id, settings.MOVIES_COLLECTION)
     elif media_type == "tv":
-        tv_client = await tv_db()
-        return await tv_client.model_exists(tmdb_id)
+        manager = await mongo_manager()
+        return await manager.model_exists(tmdb_id, settings.TV_COLLECTION)
     return False
 
 
