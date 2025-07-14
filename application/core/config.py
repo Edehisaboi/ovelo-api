@@ -70,12 +70,12 @@ class Settings(BaseSettings):
     TV_INDEX_NAME:           str = "tv_index"
 
     # Embedding paths
-    MOVIE_EMBEDDING_PATH:    str = "transcript_chunks.embedding"
-    TV_EMBEDDING_PATH:       str = "seasons.episodes.transcript_chunks.embedding"
+    MOVIE_EMBEDDING_PATH:    str = "embedding"
+    TV_EMBEDDING_PATH:       str = "embedding"
 
     # Text paths
-    MOVIE_TEXT_PATH:         str = "transcript_chunks.text"
-    TV_TEXT_PATH:            str = "seasons.episodes.transcript_chunks.text"
+    MOVIE_TEXT_PATH:         str = "text"
+    TV_TEXT_PATH:            str = "text"
 
     # Vector dimensions
     MOVIE_NUM_DIMENSIONS:    int = 1536
