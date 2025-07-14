@@ -112,10 +112,12 @@ def extract_tv_collections(tv: TVDetails) -> dict:
             if ep.transcript_chunks:
                 for chunk in ep.transcript_chunks:
                     episode_chunks.append({
-                        "episode_id":   None,  # Fill after episode insert
-                        "index":        chunk.index,
-                        "text":         chunk.text,
-                        "embedding":    chunk.embedding
+                        "episode_id":       None,  # Fill after episode insert
+                        "season_number":    ep.season_number,  # For linking to episode
+                        "episode_number":   ep.episode_number,  # For linking to episode
+                        "index":            chunk.index,
+                        "text":             chunk.text,
+                        "embedding":        chunk.embedding
                     })
 
     # Watch providers (can be None if not present)
