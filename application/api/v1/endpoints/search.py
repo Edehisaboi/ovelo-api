@@ -94,7 +94,7 @@ async def search_media(
 
             # Ingest TMDb results into the database if they are not already present
             if settings.INGESTION_ENABLED and tmdb_results is not None:
-                async for model in generate_data(tmdb_results):
+                async for model in generate_data(tmdb_results, manager=mongodb_manager):
                     if model is not None:
                         if isinstance(model, MovieDetails):
                             await mongodb_manager.insert_movie_document(model)
