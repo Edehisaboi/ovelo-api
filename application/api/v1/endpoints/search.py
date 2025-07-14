@@ -4,14 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from application.core.config import settings
-from application.core.resources import movie_db, tv_db
+from application.core.resources import mongo_manager
 from application.core.logging import get_logger
 
 from application.models import MovieDetails, TVDetails, SearchResults
 from application.services.media import tmdb_service
 
-from infrastructure.database.mongodb import MongoClientWrapper
-from infrastructure.database.queries import search_by_title
+from application.data.generator import generate_data
+
+from infrastructure.database import search_by_title
 
 router = APIRouter()
 
@@ -40,9 +41,8 @@ class SearchResponse(BaseModel):
 
 @router.post("/search", response_model=SearchResponse)
 async def search_media(
-    request:         SearchRequest,
-    movie_db_client: MongoClientWrapper = Depends(movie_db),
-    tv_db_client:    MongoClientWrapper = Depends(tv_db)
+    request: SearchRequest,
+    mongodb_manager = Depends(mongo_manager)
 ):
     """
     Search for movies and TV shows using hybrid search.
@@ -51,14 +51,14 @@ async def search_media(
     logger.info(f"Searching for: {request.query}")
 
     try:
+        # Search the database for movies and TV shows
         db_results = await search_by_title(
-            movie_db=movie_db_client,
-            tv_db=tv_db_client,
+            manager=mongodb_manager,
             query=request.query,
             exact_match=request.exact_match,
             language=request.language,
             country=request.country,
-            limit=request.limit
+            limit = request.limit
         )
     except Exception as e:
         logger.error(f"Error searching database: {e}")
@@ -81,16 +81,25 @@ async def search_media(
             elif request.include_movies:
                 tmdb_results = await tmdb_service.search_movies(
                     query=request.query,
-                    language=request.language,
+                    language=request.language or settings.TMDB_LANGUAGE,
                     include_adult=True,
                     region=request.country
                 )
             elif request.include_tv:
                 tmdb_results = await tmdb_service.search_tv_shows(
                     query=request.query,
-                    language=request.language,
+                    language=request.language or settings.TMDB_LANGUAGE,
                     include_adult=True
                 )
+
+            # Ingest TMDb results into the database if they are not already present
+            if settings.INGESTION_ENABLED and tmdb_results is not None:
+                async for model in generate_data(tmdb_results):
+                    if model is not None:
+                        if isinstance(model, MovieDetails):
+                            await mongodb_manager.insert_movie_document(model)
+                        elif isinstance(model, TVDetails):
+                            await mongodb_manager.insert_tv_show_document(model)
 
             # Compose empty or partial DB results, but always provide query and total_results for consistency
             return SearchResponse(
