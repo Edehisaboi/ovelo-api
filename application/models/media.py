@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List, Dict
 from datetime import datetime, date
 
@@ -11,8 +11,8 @@ class SearchResult(BaseModel):
     poster_path:    Optional[str] = None
     backdrop_path:  Optional[str] = None
     media_type:     Optional[str] = None  # it's only provided for multi-search results
-    release_date:   Optional[date | str] = None  # For movies
-    first_air_date: Optional[date | str] = None  # For TV shows
+    release_date:   Optional[str | date] = None  # For movies
+    first_air_date: Optional[str | date] = None  # For TV shows
     vote_average:   Optional[float] = None
     vote_count:     Optional[int] = None
 
@@ -40,14 +40,8 @@ class CastMember(BaseModel):
     character:      str
     known_for_department: str
 
-class CrewMember(BaseModel):
-    name:           str
-    job:            str
-    department:     str
-
 class MovieCredits(BaseModel):
     cast:   List[CastMember]
-    crew:   List[CrewMember]
 
 class Image(BaseModel):
     aspect_ratio:   float
@@ -87,15 +81,14 @@ class Season(BaseModel):
     name:           str
     overview:       str
     season_number:  int
-    episode_count:  int
+    episode_count:  Optional[int] = None
     episodes:       List['Episode'] = Field(default_factory=list)
 
-    @field_validator('episode_count', mode='before')
-    def set_episode_count(cls, v, values):
-        if v is not None:
-            return v
-        episodes = values.get('episodes', [])
-        return len(episodes)
+    @model_validator(mode='after')
+    def set_episode_count(self):
+        if self.episode_count is None:
+            self.episode_count = len(self.episodes)
+        return self
 
 
 class WatchProvider(BaseModel):
@@ -125,7 +118,7 @@ class MovieDetails(BaseModel):
     overview:           str
     poster_path:        Optional[str] = None
     backdrop_path:      Optional[str] = None
-    release_date:       Optional[datetime] = None
+    release_date:       Optional[str | datetime] = None
     runtime:            Optional[int] = None
     genres:             List[Genre]
     original_language:  str
@@ -152,8 +145,8 @@ class TVDetails(BaseModel):
     overview:           str
     poster_path:        Optional[str] = None
     backdrop_path:      Optional[str] = None
-    first_air_date:     Optional[date] = None
-    last_air_date:      Optional[date] = None
+    first_air_date:     Optional[str | date] = None
+    last_air_date:      Optional[str | date] = None
     number_of_seasons:  int
     number_of_episodes: int
     genres:             List[Genre]

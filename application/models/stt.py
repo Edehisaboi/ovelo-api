@@ -54,4 +54,4 @@ class STTResult(BaseModel):
                 is_partial=False,
                 message_type=STTMessageType(message_type) if message_type else None,
                 metadata=message
-            ) 
+            )
