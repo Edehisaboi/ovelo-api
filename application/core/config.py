@@ -108,7 +108,7 @@ class Settings(BaseSettings):
 
     # ============= Batch Processing Configuration =============
     """Batch processing settings for TV show extraction."""
-    TV_EXTRACTION_BATCH_SIZE: int = 3  # Number of episodes to process concurrently
+    TV_EXTRACTION_BATCH_SIZE: int = OPENSUBTITLES_RATE_LIMIT - 2   # Number of episodes to process concurrently
     TV_EXTRACTION_BATCH_DELAY: float = 1.0  # Delay between batches in seconds
 
     # ============= Caching Configuration =============
