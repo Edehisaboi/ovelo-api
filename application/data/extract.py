@@ -10,13 +10,27 @@ from application.models import (
     SubtitleFile,
     SubtitleSearchResult,
     TranscriptChunk,
-    TVDetails,
+    TVDetails
 )
 from application.services.embeddings import embedding_service
 from application.services.media import tmdb_service
 from application.services.subtitles import subtitle_processor
+from application.core.config import settings
 
 logger = get_logger(__name__)
+
+# Global semaphore to limit concurrent OpenSubtitles API requests
+# OpenSubtitles allows 5 requests per second, so we'll limit to 3 concurrent requests
+OPENSUBTITLES_SEMAPHORE = None  # Will be initialized after settings are loaded
+
+def _get_opensubtitles_semaphore() -> asyncio.Semaphore:
+    """Get the OpenSubtitles semaphore, initializing it if needed."""
+    global OPENSUBTITLES_SEMAPHORE
+    if OPENSUBTITLES_SEMAPHORE is None:
+        # Use the same value as batch size for consistency
+        from application.core.config import settings
+        OPENSUBTITLES_SEMAPHORE = asyncio.Semaphore(settings.TV_EXTRACTION_BATCH_SIZE)
+    return OPENSUBTITLES_SEMAPHORE
 
 
 class Extractor:
@@ -55,9 +69,10 @@ class Extractor:
 
             # Download the first subtitle file
             subtitle_file: SubtitleFile = subtitle_search_result.attributes.files[0]
-            downloaded_subtitle: SubtitleFile = await opensubtitles_client.subtitles.download(subtitle_file)
-            if not downloaded_subtitle or not downloaded_subtitle.subtitle_text:
-                raise IOError(f"Subtitle download failed for movie ID {movie_id}.")
+            async with _get_opensubtitles_semaphore():
+                downloaded_subtitle: SubtitleFile = await opensubtitles_client.subtitles.download(subtitle_file)
+                if not downloaded_subtitle or not downloaded_subtitle.subtitle_text:
+                    raise IOError(f"Subtitle download failed for movie ID {movie_id}.")
 
             # Process subtitle text into transcript chunks
             transcript_chunks: List[TranscriptChunk] = subtitle_processor.process(downloaded_subtitle.subtitle_text)
@@ -138,6 +153,7 @@ class Extractor:
     ) -> List[Season]:
         """
         Process all seasons and episodes with their corresponding subtitle results.
+        Uses sequential processing with small batches to respect API rate limits.
 
         Args:
             seasons: List of seasons from TVDetails.
@@ -167,11 +183,25 @@ class Extractor:
                 task = Extractor._process_episode_with_subtitles(episode, matching_result)
                 episode_tasks.append((season.season_number, episode.episode_number, task))
 
-        # Execute all episode processing tasks concurrently
-        episode_results = await asyncio.gather(
-            *[task for _, _, task in episode_tasks],
-            return_exceptions=True
-        )
+        # Process episodes in small batches to respect rate limits
+        # OpenSubtitles allows 5 requests per second, so we'll use batches of 3 to be safe
+        batch_size = settings.TV_EXTRACTION_BATCH_SIZE
+        episode_results = []
+        
+        for i in range(0, len(episode_tasks), batch_size):
+            batch = episode_tasks[i:i + batch_size]
+            logger.info(f"Processing batch {i//batch_size + 1}/{(len(episode_tasks) + batch_size - 1)//batch_size} [{len(batch)} episodes]")
+            
+            # Process this batch concurrently
+            batch_results = await asyncio.gather(
+                *[task for _, _, task in batch],
+                return_exceptions=True
+            )
+            episode_results.extend(batch_results)
+            
+            # Add a small delay between batches to ensure rate limits are respected
+            if i + batch_size < len(episode_tasks):
+                await asyncio.sleep(settings.TV_EXTRACTION_BATCH_DELAY)  # Configurable delay between batches
 
         # Build a lookup dictionary: (season_number, episode_number) -> result
         episode_tasks_keys = [
@@ -193,8 +223,9 @@ class Extractor:
                 elif result is not None:
                     enriched_episodes.append(result)
                 else:
-                    # No result found; fallback to original episode
+                    logger.warning(f"No subtitles found for S{season.season_number}E{episode.episode_number}")
                     enriched_episodes.append(episode)
+
             enriched_season = season.model_copy(update={"episodes": enriched_episodes})
             enriched_seasons.append(enriched_season)
 
@@ -206,6 +237,7 @@ class Extractor:
     ) -> Episode:
         """
         Process a single episode with its subtitle data.
+        Uses semaphore to limit concurrent OpenSubtitles API requests.
 
         Args:
             episode: The episode to process.
@@ -219,29 +251,31 @@ class Extractor:
             return episode
 
         try:
-            # Download the first subtitle file
-            subtitle_file: SubtitleFile = subtitle_search_result.attributes.files[0]
-            downloaded_subtitle: SubtitleFile = await opensubtitles_client.subtitles.download(subtitle_file)
-            if not downloaded_subtitle or not downloaded_subtitle.subtitle_text:
-                logger.warning(f"Subtitle download failed for S{episode.season_number}E{episode.episode_number}")
-                return episode
+            # Use semaphore to limit concurrent API requests
+            async with _get_opensubtitles_semaphore():
+                # Download the first subtitle file
+                subtitle_file: SubtitleFile = subtitle_search_result.attributes.files[0]
+                downloaded_subtitle: SubtitleFile = await opensubtitles_client.subtitles.download(subtitle_file)
+                if not downloaded_subtitle or not downloaded_subtitle.subtitle_text:
+                    logger.warning(f"Subtitle download failed for S{episode.season_number}E{episode.episode_number}")
+                    return episode
 
-            # Process subtitle text into transcript chunks
-            transcript_chunks: List[TranscriptChunk] = subtitle_processor.process(downloaded_subtitle.subtitle_text)
-            if not transcript_chunks:
-                logger.warning(f"No valid subtitle chunks for S{episode.season_number}E{episode.episode_number}")
-                return episode
+                # Process subtitle text into transcript chunks
+                transcript_chunks: List[TranscriptChunk] = subtitle_processor.process(downloaded_subtitle.subtitle_text)
+                if not transcript_chunks:
+                    logger.warning(f"No valid subtitle chunks for S{episode.season_number}E{episode.episode_number}")
+                    return episode
 
-            # Generate embeddings for the transcript chunks
-            enriched_chunks: List[TranscriptChunk] = await embedding_service.update_with_embeddings(transcript_chunks)
-            if not enriched_chunks or enriched_chunks[0].embedding is None:
-                logger.warning(f"Embedding generation failed for S{episode.season_number}E{episode.episode_number}")
-                return episode
+                # Generate embeddings for the transcript chunks
+                enriched_chunks: List[TranscriptChunk] = await embedding_service.update_with_embeddings(transcript_chunks)
+                if not enriched_chunks or enriched_chunks[0].embedding is None:
+                    logger.warning(f"Embedding generation failed for S{episode.season_number}E{episode.episode_number}")
+                    return episode
 
-            # Update episode with enriched transcript chunks
-            enriched_episode = episode.model_copy(update={"transcript_chunks": enriched_chunks})
-            logger.debug(f"Successfully processed S{episode.season_number}E{episode.episode_number} with {len(enriched_chunks)} chunks")
-            return enriched_episode
+                # Update episode with enriched transcript chunks
+                enriched_episode = episode.model_copy(update={"transcript_chunks": enriched_chunks})
+                logger.debug(f"Successfully processed S{episode.season_number}E{episode.episode_number} with {len(enriched_chunks)} chunks")
+                return enriched_episode
 
         except Exception as e:
             logger.error(f"Error processing episode S{episode.season_number}E{episode.episode_number}: {e}")
