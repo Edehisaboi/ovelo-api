@@ -2,29 +2,34 @@ from __future__ import annotations
 from typing import List, Dict, Tuple, Optional, Union
 
 from langchain_core.documents import Document
-
 from application.core.config import settings
 from application.core.logging import get_logger
-from infrastructure.database import MongoClientWrapper
+from infrastructure.database import MongoCollectionsManager, CollectionWrapper
 from application.models.media import MovieDetails, TVDetails
 
 logger = get_logger(__name__)
 
-
 async def search_by_title(
-    movie_db:   MongoClientWrapper,
-    tv_db:      MongoClientWrapper,
-    query:       str,
-    exact_match: bool = False,
-    language:    Optional[str] = None,
-    country:     Optional[str] = None,
-    limit:       int = settings.MAX_RESULTS_PER_PAGE
+    manager:        MongoCollectionsManager,
+    query:          str,
+    exact_match:    bool = False,
+    language:       Optional[str] = None,
+    country:        Optional[str] = None,
+    limit: int = settings.MAX_RESULTS_PER_PAGE
 ) -> Dict[str, List]:
     """
     Search both movies and TV shows collections using MongoDB's $unionWith aggregation.
 
+    Args:
+        manager (MongoCollectionsManager): The MongoDB collections manager.
+        query (str): The search query.
+        exact_match (bool): If True, uses exact match, otherwise text search.
+        language (Optional[str]): Filter by spoken language.
+        country (Optional[str]): Filter by origin country.
+        limit (int): Max number of results to return.
+
     Returns:
-        Dict[str, List]: Dictionary with 'movies' and 'tv_shows' keys containing MovieDetails and TVDetails objects.
+        Dict[str, List]: Dictionary with 'movies' and 'tv_shows' keys.
     """
     try:
         # Build match stages for movies and TV shows
@@ -39,37 +44,31 @@ async def search_by_title(
             tv_match["$text"] = {"$search": query}
 
         if language:
-            # Use $elemMatch if spoken_languages is an array of objects
             movie_match["spoken_languages"] = {"$elemMatch": {"name": language}}
             tv_match["spoken_languages"] = {"$elemMatch": {"name": language}}
         if country:
             movie_match["origin_country"] = country
             tv_match["origin_country"] = country
 
-        # Construct the aggregation pipeline
-        pipeline = [
-            {"$match": movie_match},
-        ]
+        pipeline = [{"$match": movie_match}]
         if not exact_match:
             pipeline.append({"$addFields": {"score": {"$meta": "textScore"}}})
         pipeline.append({"$addFields": {"media_type": "movie"}})
 
-        # Build sub-pipeline for TV shows
-        tv_pipeline = [
-            {"$match": tv_match},
-        ]
+        # TV shows sub-pipeline
+        tv_pipeline = [{"$match": tv_match}]
         if not exact_match:
             tv_pipeline.append({"$addFields": {"score": {"$meta": "textScore"}}})
         tv_pipeline.append({"$addFields": {"media_type": "tv_show"}})
 
         pipeline.append({
             "$unionWith": {
-                "coll": tv_db.collection_name,
+                "coll": manager.tv_shows.collection_name,
                 "pipeline": tv_pipeline
             }
         })
 
-        # Add sorting and limiting
+        # Sorting and limiting
         if not exact_match:
             pipeline.append({"$sort": {"score": -1}})
         else:
@@ -85,65 +84,50 @@ async def search_by_title(
                 }
             })
             pipeline.append({"$sort": {"sort_order": 1}})
-        
-        # Add limit stage
         pipeline.append({"$limit": limit})
 
-        # Execute the aggregation asynchronously
+        # Execute aggregation
         results = []
-        async for result in movie_db.collection.aggregate(pipeline):
+        async for result in manager.movies.collection.aggregate(pipeline):
             results.append(result)
 
-        # Separate results into movies and tv_shows
-        movies:     List[MovieDetails] = []
-        tv_shows:   List[TVDetails] = []
+        movies: List[MovieDetails] = []
+        tv_shows: List[TVDetails] = []
 
         for result in results:
             result.pop("score", None)
             result.pop("sort_order", None)
-            
-            #TODO: Fix field alias mismatch: convert watch_providers to watch/providers
             if "watch_providers" in result:
                 result["watch/providers"] = result.pop("watch_providers")
-
             if "tmdb_id" in result:
                 result["id"] = result.pop("tmdb_id")
-            
+
             if result.get("media_type") == "movie":
-                # Convert to MovieDetails object
                 try:
-                    movie_details = MovieDetails(**result)
-                    movies.append(movie_details)
+                    movies.append(MovieDetails(**result))
                 except Exception as e:
                     logger.warning(f"Failed to convert movie result to MovieDetails: {e}")
-                    # Skip invalid results
-                    continue
             else:
-                # Convert to TVDetails object
                 try:
-                    tv_details = TVDetails(**result)
-                    tv_shows.append(tv_details)
+                    tv_shows.append(TVDetails(**result))
                 except Exception as e:
                     logger.warning(f"Failed to convert TV result to TVDetails: {e}")
-                    # Skip invalid results
-                    continue
         return {"movies": movies, "tv_shows": tv_shows}
-
     except Exception as e:
         logger.error(f"Error searching both collections: {str(e)}")
         raise
 
 async def vector_search(
-    mongodb: MongoClientWrapper,
-    query:   str,
-    limit:   int = settings.MAX_RESULTS_PER_PAGE,
+    wrapper:    CollectionWrapper,
+    query:      str,
+    limit:      int = settings.MAX_RESULTS_PER_PAGE,
     filter_criteria: Optional[Dict] = None
 ) -> Union[List[Tuple[Document, float]], List[Document]]:
     """
     Perform a hybrid vector and text search using the collection's hybrid retriever.
 
     Args:
-        mongodb (MongoClientWrapper): The MongoDB client wrapper, with initialized retriever.
+        wrapper (CollectionWrapper): Collection wrapper with an initialized retriever.
         query (str): The search query.
         limit (int, optional): Max number of results to return.
         filter_criteria (dict, optional): MongoDB pre_filter for vector search (if supported).
@@ -154,10 +138,11 @@ async def vector_search(
             - List of Document if using retriever.invoke.
     """
     try:
-        if not mongodb.retriever:
-            raise ValueError("Hybrid search retriever not initialized. Call initialize_indexes() first.")
-
-        retriever = mongodb.retriever
+        retriever = getattr(wrapper, "retriever", None)
+        if not retriever:
+            raise ValueError(
+                "Hybrid search retriever not initialized for this collection."
+            )
         vectorstore = retriever.vectorstore
 
         if vectorstore:
