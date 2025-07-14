@@ -14,6 +14,8 @@ from application.data.extract import Extractor
 from application.core.logging import get_logger
 from application.core.resources import mongo_manager
 
+from infrastructure.database.mongodb import MongoCollectionsManager
+
 logger = get_logger(__name__)
 
 
@@ -36,7 +38,7 @@ def _determine_media_type(
 
 
 async def _should_skip_media(
-    manager,
+    manager: MongoCollectionsManager,
     search_result: SearchResult,
 ) -> bool:
     """
@@ -88,7 +90,7 @@ async def _extract_media_details(
 
 
 async def _process_search_result(
-    manager,
+    manager: MongoCollectionsManager,
     search_result: SearchResult,
 ) -> Optional[Union[MovieDetails, TVDetails]]:
     """
@@ -109,6 +111,7 @@ async def _process_search_result(
 async def generate_data(
     search_results: SearchResults,
     max_items: Optional[int] = settings.MAX_INGESTION_ITEMS,
+    manager: Optional[MongoCollectionsManager] = None,
 ) -> AsyncGenerator[Union[MovieDetails, TVDetails], None]:
     """
     Generate enriched movie and TV show data from search results sequentially.
@@ -116,6 +119,7 @@ async def generate_data(
     Args:
         search_results (SearchResults): Object containing basic search results
         max_items (Optional[int]): Limit number of items processed
+        manager: Optional MongoDB manager instance to use (creates new one if not provided)
 
     Yields:
         Union[MovieDetails, TVDetails]: Enriched media data with transcript chunks
@@ -132,8 +136,9 @@ async def generate_data(
         leave=True,
     )
 
-    # Create mongo manager
-    manager = await mongo_manager()
+    # Use provided manager or create new one
+    if manager is None:
+        manager = await mongo_manager()
 
     for search_result in progress_bar:
         item_name = search_result.title or search_result.name or f"TMDB ID: {search_result.tmdb_id}"
@@ -157,14 +162,16 @@ async def generate_data_batch(
     search_results: SearchResults,
     batch_size: int = settings.TV_EXTRACTION_BATCH_SIZE,
     max_items: Optional[int] = None,
+    manager: Optional[MongoCollectionsManager] = None,
 ) -> AsyncGenerator[Union[MovieDetails, TVDetails], None]:
     """
     Generate enriched media data with concurrent processing in batches.
 
     Args:
-        search_results (SearchResults): Object containing basic search results
+        search_results (SearchResults): Object containin    g basic search results
         batch_size (int): Number of items to process in each batch
         max_items (Optional[int]): Limit number of items processed
+        manager: Optional MongoDB manager instance to use (creates new one if not provided)
 
     Yields:
         Union[MovieDetails, TVDetails]: Enriched media data with transcript chunks
@@ -181,8 +188,9 @@ async def generate_data_batch(
         leave=True,
     )
 
-    # Create the mongo manager once and reuse it
-    manager = await mongo_manager()
+    # Use provided manager or create new one
+    if manager is None:
+        manager = await mongo_manager()
 
     # Semaphore to limit max concurrency (across all batches)
     semaphore = asyncio.Semaphore(batch_size)
