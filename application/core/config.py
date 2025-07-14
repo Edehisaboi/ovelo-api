@@ -1,7 +1,6 @@
 from typing import Optional, Literal, List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 class Settings(BaseSettings):
     """
     Application settings and configuration.
@@ -52,8 +51,16 @@ class Settings(BaseSettings):
     """MongoDB database connection and collection settings."""
     MONGODB_URL:             str
     MONGODB_DB:              str = "moovzmatch"
+
     MOVIES_COLLECTION:       str = "movies"
+    MOVIE_CHUNKS_COLLECTION: str = "movie_chunks"
+    MOVIE_WATCH_PROVIDERS_COLLECTION: str = "movie_watch_providers"
+
     TV_COLLECTION:           str = "tv_shows"
+    TV_SEASONS_COLLECTION:   str = "tv_seasons"
+    TV_EPISODES_COLLECTION:  str = "tv_episodes"
+    TV_CHUNKS_COLLECTION:    str = "tv_chunks"
+    TV_WATCH_PROVIDERS_COLLECTION: str = "tv_watch_providers"
 
     # ============= Vector Search Configuration =============
     """Vector search and embedding settings for similarity search."""
@@ -70,8 +77,8 @@ class Settings(BaseSettings):
     TV_TEXT_PATH:            str = "seasons.episodes.transcript_chunks.text"
 
     # Vector dimensions
-    MOVIE_NUM_DIMENSIONS:    int = 1535
-    TV_NUM_DIMENSIONS:       int = 1535
+    MOVIE_NUM_DIMENSIONS:    int = 1536
+    TV_NUM_DIMENSIONS:       int = 1536
 
     # Similarity metrics
     MOVIE_SIMILARITY:        str = "cosine"
@@ -98,6 +105,11 @@ class Settings(BaseSettings):
     CHUNK_BUFFER_SIZE:        int = 1
     MIN_CHUNK_WORDS:          int = 5
     CHUNK_OVERLAP_PERCENT:    float = 0.15  # 15% overlap between chunks
+
+    # ============= Batch Processing Configuration =============
+    """Batch processing settings for TV show extraction."""
+    TV_EXTRACTION_BATCH_SIZE: int = 3  # Number of episodes to process concurrently
+    TV_EXTRACTION_BATCH_DELAY: float = 1.0  # Delay between batches in seconds
 
     # ============= Caching Configuration =============
     """Cache settings for search results and other data."""

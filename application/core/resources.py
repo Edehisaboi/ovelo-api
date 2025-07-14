@@ -1,11 +1,10 @@
 from .dependencies import (
-    get_movie_db,
-    get_tv_db,
     get_embedding_client,
     get_tmdb_client,
     get_opensubtitles_client,
     get_stt_client,
     get_rekognition_client,
+    get_mongo_manager,
 )
 
 class LazySingleton:
@@ -40,22 +39,22 @@ class AsyncLazySingleton:
         return self._instance
 
     def __getattr__(self, item):
-        raise AttributeError(f"AsyncLazySingleton requires await: await {self.__class__.__name__}()")
+        raise AttributeError(
+            f"AsyncLazySingleton requires await: await {self.__class__.__name__}()"
+        )
 
-# Sync resources
+# Sync resources (singletons)
 embedding_client     = LazySingleton(get_embedding_client)
 stt_client           = LazySingleton(get_stt_client)
 tmdb_client          = LazySingleton(get_tmdb_client)
 opensubtitles_client = LazySingleton(get_opensubtitles_client)
 rekognition_client   = LazySingleton(get_rekognition_client)
 
-# Async resources
-movie_db             = AsyncLazySingleton(get_movie_db)
-tv_db                = AsyncLazySingleton(get_tv_db)
+# Async resources: MongoCollectionsManager
+mongo_manager        = AsyncLazySingleton(get_mongo_manager)
 
 __all__ = [
-    "movie_db",
-    "tv_db",
+    "mongo_manager",
     "embedding_client",
     "stt_client",
     "tmdb_client",
