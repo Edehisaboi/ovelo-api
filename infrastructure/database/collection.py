@@ -48,6 +48,7 @@ class CollectionWrapper(Generic[T]):
     ) -> Optional[T]:
         doc = await self.collection.find_one(filter_dict)
         if doc:
+            doc = self._transform_document_for_model(doc)
             if self.model == dict:
                 return doc
             return self.model(**doc)
@@ -63,8 +64,8 @@ class CollectionWrapper(Generic[T]):
             cursor = cursor.limit(limit)
         docs = await cursor.to_list(length=limit or 1000)
         if self.model == dict:
-            return docs
-        return [self.model(**doc) for doc in docs]
+            return [self._transform_document_for_model(doc) for doc in docs]
+        return [self.model(**self._transform_document_for_model(doc)) for doc in docs]
 
     async def update_one(
         self,
@@ -95,3 +96,17 @@ class CollectionWrapper(Generic[T]):
             return document
         else:
             raise ValueError("Document must be a Pydantic model instance or dict.")
+
+    # TODO: Add more methods as needed, e.g. for aggregation, indexing, etc.
+    # TODO: make generic for more complex models and move to utils
+    def _transform_document_for_model(self, doc: dict) -> dict:
+        transformed = doc.copy()
+        # For MovieDetails and TVDetails, map tmdb_id -> id, watch_providers -> watch/providers
+        if self.model.__name__ in ("MovieDetails", "TVDetails"):
+            if "tmdb_id" in transformed:
+                transformed["id"] = transformed["tmdb_id"]
+            if "watch_providers" in transformed:
+                transformed["watch/providers"] = transformed["watch_providers"]
+            elif "watch/providers" not in transformed:
+                transformed["watch/providers"] = {"results": {}}
+        return transformed

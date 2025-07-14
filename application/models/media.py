@@ -131,7 +131,7 @@ class MovieDetails(BaseModel):
     credits:            MovieCredits
     images:             MovieImages
     videos:             MovieVideos
-    watch_providers:    WatchProviders = Field(alias="watch/providers")
+    watch_providers:    Optional[WatchProviders] = Field(default=None, alias="watch/providers")
     transcript_chunks:  Optional[List[TranscriptChunk]] = None
     embedding_model:    Optional[str] = None
     vote_average:       float
@@ -151,13 +151,13 @@ class TVDetails(BaseModel):
     number_of_seasons:  int
     number_of_episodes: int
     genres:             List[Genre]
-    seasons:            List[Season]
+    seasons:            Optional[List[Season]] = None
     status:             str
     tagline:            Optional[str] = None
     credits:            MovieCredits
     images:             MovieImages
     videos:             MovieVideos
-    watch_providers:    WatchProviders = Field(alias="watch/providers")
+    watch_providers:    Optional[WatchProviders] = Field(default=None, alias="watch/providers")
     embedding_model:    Optional[str] = None
     external_ids:       ExternalID
     origin_country:     List[str]

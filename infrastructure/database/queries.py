@@ -97,10 +97,21 @@ async def search_by_title(
         for result in results:
             result.pop("score", None)
             result.pop("sort_order", None)
-            if "watch_providers" in result:
-                result["watch/providers"] = result.pop("watch_providers")
+            
+            # Always ensure 'id' field exists (alias for tmdb_id)
             if "tmdb_id" in result:
                 result["id"] = result.pop("tmdb_id")
+            elif "id" not in result:
+                # If neither tmdb_id nor id exists, this is a problem
+                logger.warning(f"Document missing tmdb_id/id field: {result}")
+                continue
+            
+            # Always ensure 'watch/providers' field exists (alias for watch_providers)
+            if "watch_providers" in result:
+                result["watch/providers"] = result.pop("watch_providers")
+            elif "watch/providers" not in result:
+                # Provide default if missing
+                result["watch/providers"] = {"results": {}}
 
             if result.get("media_type") == "movie":
                 try:

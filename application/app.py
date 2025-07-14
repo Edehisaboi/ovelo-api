@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     yield
     logger.info("Shutting down application...")
-    close_database_connections()
+    await close_database_connections()
     logger.info("Application shutdown complete.")
 
 # Create FastAPI application
@@ -81,8 +81,11 @@ from pydantic import BaseModel
 class MovieIdRequest(BaseModel):
     movie_id: int
 
-@application.post("/test_extractor", response_model=dict)
-async def test_extractor(payload: MovieIdRequest):
+class TVIdRequest(BaseModel):
+    tv_id: int
+
+@application.post("/test_extractor_movie", response_model=dict)
+async def test_extractor_movie(payload: MovieIdRequest):
     from application.data.extract import Extractor
     from application.models import MovieDetails
 
@@ -94,6 +97,21 @@ async def test_extractor(payload: MovieIdRequest):
         return movie.model_dump()
     except Exception as e:
         logger.error(f"Error extracting movie data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@application.post("/test_extractor_tv", response_model=dict)
+async def test_extractor_tv(payload: TVIdRequest):
+    from application.data.extract import Extractor
+    from application.models import TVDetails
+
+    tv_id = payload.tv_id
+    try:
+        extractor = Extractor()
+        tv: TVDetails = await extractor.extract_tv_data(tv_id)
+        # .model_dump() returns a dict
+        return tv.model_dump()
+    except Exception as e:
+        logger.error(f"Error extracting tv data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # if __name__ == "__main__":

@@ -52,7 +52,7 @@ async def _should_skip_media(
       - The item does not exist AND its language is allowed (should be processed).
     """
     media_type = _determine_media_type(search_result)
-    tmdb_id = str(search_result.tmdb_id)
+    tmdb_id = search_result.tmdb_id
 
     exists = False
     if media_type == "movie":
@@ -101,6 +101,7 @@ async def _process_search_result(
     if await _should_skip_media(manager, search_result):
         logger.info(f"Skipping existing item: {item_name} ID: {search_result.tmdb_id}")
         return None
+
     try:
         return await _extract_media_details(search_result)
     except Exception as exc:
@@ -168,7 +169,7 @@ async def generate_data_batch(
     Generate enriched media data with concurrent processing in batches.
 
     Args:
-        search_results (SearchResults): Object containin    g basic search results
+        search_results (SearchResults): Object containing basic search results
         batch_size (int): Number of items to process in each batch
         max_items (Optional[int]): Limit number of items processed
         manager: Optional MongoDB manager instance to use (creates new one if not provided)
@@ -201,7 +202,7 @@ async def generate_data_batch(
 
     for i in range(0, total_items, batch_size):
         batch = results_to_process[i : i + batch_size]
-        tasks = [process_with_semaphore(result) for result in batch]
+        tasks = [process_with_semaphore(result) for result in batch if result is not None]
         batch_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for j, result in enumerate(batch_results):
