@@ -1,174 +1,145 @@
-from __future__ import annotations
-from typing import List, Dict, Tuple, Optional, Union
+from typing import List, Dict
 
-from langchain_core.documents import Document
 from application.core.config import settings
 from application.core.logging import get_logger
-from infrastructure.database import MongoCollectionsManager, CollectionWrapper
 from application.models.media import MovieDetails, TVDetails
+
+from infrastructure.database import MongoCollectionsManager
 
 logger = get_logger(__name__)
 
+
 async def search_by_title(
-    manager:        MongoCollectionsManager,
-    query:          str,
-    exact_match:    bool = False,
-    language:       Optional[str] = None,
-    country:        Optional[str] = None,
+    manager: MongoCollectionsManager,
+    query: str,
     limit: int = settings.MAX_RESULTS_PER_PAGE
-) -> Dict[str, List]:
+) -> tuple[List[MovieDetails], List[TVDetails]]:
     """
-    Search both movies and TV shows collections using MongoDB's $unionWith aggregation.
+    Text search for both movies and TV shows using $text and $unionWith.
 
     Args:
-        manager (MongoCollectionsManager): The MongoDB collections manager.
-        query (str): The search query.
-        exact_match (bool): If True, uses exact match, otherwise text search.
-        language (Optional[str]): Filter by spoken language.
-        country (Optional[str]): Filter by origin country.
-        limit (int): Max number of results to return.
+        manager (MongoCollectionsManager): The database collections manager.
+        query (str): The text search query.
+        limit (int): Max results to return.
 
     Returns:
-        Dict[str, List]: Dictionary with 'movies' and 'tv_shows' keys.
+        List[Dict]: List of combined search results.
     """
     try:
-        # Build match stages for movies and TV shows
-        movie_match = {}
-        tv_match = {}
-
-        if exact_match:
-            movie_match["$or"] = [{"title": query}, {"original_title": query}]
-            tv_match["$or"] = [{"name": query}, {"original_name": query}]
-        else:
-            movie_match["$text"] = {"$search": query}
-            tv_match["$text"] = {"$search": query}
-
-        if language:
-            movie_match["spoken_languages"] = {"$elemMatch": {"name": language}}
-            tv_match["spoken_languages"] = {"$elemMatch": {"name": language}}
-        if country:
-            movie_match["origin_country"] = country
-            tv_match["origin_country"] = country
-
-        pipeline = [{"$match": movie_match}]
-        if not exact_match:
-            pipeline.append({"$addFields": {"score": {"$meta": "textScore"}}})
-        pipeline.append({"$addFields": {"media_type": "movie"}})
-
-        # TV shows sub-pipeline
-        tv_pipeline = [{"$match": tv_match}]
-        if not exact_match:
-            tv_pipeline.append({"$addFields": {"score": {"$meta": "textScore"}}})
-        tv_pipeline.append({"$addFields": {"media_type": "tv_show"}})
-
-        pipeline.append({
-            "$unionWith": {
-                "coll": manager.tv_shows.collection_name,
-                "pipeline": tv_pipeline
-            }
-        })
-
-        # Sorting and limiting
-        if not exact_match:
-            pipeline.append({"$sort": {"score": -1}})
-        else:
-            pipeline.append({
-                "$addFields": {
-                    "sort_order": {
-                        "$cond": {
-                            "if": {"$eq": ["$media_type", "movie"]},
-                            "then": 1,
-                            "else": 2
-                        }
+        pipeline = [
+            {
+                '$match': {
+                    '$text': {
+                        '$search': query
                     }
                 }
-            })
-            pipeline.append({"$sort": {"sort_order": 1}})
-        pipeline.append({"$limit": limit})
+            },
+            {
+                '$addFields': {
+                    'newField': {
+                        'score': {
+                            '$meta': 'textScore'
+                        },
+                        'media_type': 'movie'
+                    }
+                }
+            },
+            {
+                '$unionWith': {
+                    'coll': manager.tv_shows.collection_name,
+                    'pipeline': [
+                        {
+                            '$match': {
+                                '$text': {
+                                    '$search': query
+                                }
+                            }
+                        },
+                        {
+                            '$addFields': {
+                                'score': {
+                                    '$meta': 'textScore'
+                                },
+                                'media_type': 'tv'
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                '$sort': {
+                    'score': {
+                        '$meta': 'textScore'
+                    }
+                }
+            },
+            {
+                '$limit': limit
+            }
+        ]
 
+        movie, tv = [], []
         # Execute aggregation
-        results = []
-        async for result in manager.movies.collection.aggregate(pipeline):
-            results.append(result)
+        async for doc in manager.movies.collection.aggregate(pipeline):
+            if doc.get('media_type') == 'movie':
+                movie.append(MovieDetails.model_validate(doc))
 
-        movies: List[MovieDetails] = []
-        tv_shows: List[TVDetails] = []
+            elif doc.get('media_type') == 'tv':
+                tv.append(TVDetails.model_validate(doc))
 
-        for result in results:
-            result.pop("score", None)
-            result.pop("sort_order", None)
-            
-            # Always ensure 'id' field exists (alias for tmdb_id)
-            if "tmdb_id" in result:
-                result["id"] = result.pop("tmdb_id")
-            elif "id" not in result:
-                # If neither tmdb_id nor id exists, this is a problem
-                logger.warning(f"Document missing tmdb_id/id field: {result}")
-                continue
-            
-            # Always ensure 'watch/providers' field exists (alias for watch_providers)
-            if "watch_providers" in result:
-                result["watch/providers"] = result.pop("watch_providers")
-            elif "watch/providers" not in result:
-                # Provide default if missing
-                result["watch/providers"] = {"results": {}}
-
-            if result.get("media_type") == "movie":
-                try:
-                    movies.append(MovieDetails(**result))
-                except Exception as e:
-                    logger.warning(f"Failed to convert movie result to MovieDetails: {e}")
             else:
-                try:
-                    tv_shows.append(TVDetails(**result))
-                except Exception as e:
-                    logger.warning(f"Failed to convert TV result to TVDetails: {e}")
-        return {"movies": movies, "tv_shows": tv_shows}
-    except Exception as e:
-        logger.error(f"Error searching both collections: {str(e)}")
-        raise
+                logger.warning(f"Unexpected media type in search results: {doc.get('media_type')}")
 
-async def vector_search(
-    wrapper:    CollectionWrapper,
-    query:      str,
-    limit:      int = settings.MAX_RESULTS_PER_PAGE,
-    filter_criteria: Optional[Dict] = None
-) -> Union[List[Tuple[Document, float]], List[Document]]:
-    """
-    Perform a hybrid vector and text search using the collection's hybrid retriever.
-
-    Args:
-        wrapper (CollectionWrapper): Collection wrapper with an initialized retriever.
-        query (str): The search query.
-        limit (int, optional): Max number of results to return.
-        filter_criteria (dict, optional): MongoDB pre_filter for vector search (if supported).
-
-    Returns:
-        Union[List[Tuple[Document, float]], List[Document]]:
-            - List of (Document, score) tuples if using similarity_search_with_score.
-            - List of Document if using retriever.invoke.
-    """
-    try:
-        retriever = getattr(wrapper, "retriever", None)
-        if not retriever:
-            raise ValueError(
-                "Hybrid search retriever not initialized for this collection."
-            )
-        vectorstore = retriever.vectorstore
-
-        if vectorstore:
-            # Returns List[Tuple[Document, float]]
-            documents = await vectorstore.asimilarity_search_with_score(
-                query=query,
-                k=limit,
-                pre_filter=filter_criteria
-            )
-        else:
-            # Returns List[Document]
-            documents = await retriever.ainvoke(query)
-
-        return documents
+        return movie, tv
 
     except Exception as e:
-        logger.error(f"Error performing vector search: {e}")
+        logger.error(f"Error in search_by_title: {str(e)}")
         raise
+
+
+#
+# async def vector_search(
+#     wrapper:    CollectionWrapper,
+#     query:      str,
+#     limit:      int = settings.MAX_RESULTS_PER_PAGE,
+#     filter_criteria: Optional[Dict] = None
+# ) -> Union[List[Tuple[Document, float]], List[Document]]:
+#     """
+#     Perform a hybrid vector and text search using the collection's hybrid retriever.
+#
+#     Args:
+#         wrapper (CollectionWrapper): Collection wrapper with an initialized retriever.
+#         query (str): The search query.
+#         limit (int, optional): Max number of results to return.
+#         filter_criteria (dict, optional): MongoDB pre_filter for vector search (if supported).
+#
+#     Returns:
+#         Union[List[Tuple[Document, float]], List[Document]]:
+#             - List of (Document, score) tuples if using similarity_search_with_score.
+#             - List of Document if using retriever.invoke.
+#     """
+#     try:
+#         # TODO: Check if the collection has a hybrid retriever initialized, IT DOES NOT CHECK IF THE COLLECTION IS A VECTOR STORE
+#         retriever = getattr(wrapper, "retriever", None)
+#         if not retriever:
+#             raise ValueError(
+#                 "Hybrid search retriever not initialized for this collection."
+#             )
+#         vectorstore = retriever.vectorstore
+#
+#         if vectorstore:
+#             # Returns List[Tuple[Document, float]]
+#             documents = await vectorstore.asimilarity_search_with_score(
+#                 query=query,
+#                 k=limit,
+#                 pre_filter=filter_criteria
+#             )
+#         else:
+#             # Returns List[Document]
+#             documents = await retriever.ainvoke(query)
+#
+#         return documents
+#
+#     except Exception as e:
+#         logger.error(f"Error performing vector search: {e}")
+#         raise
