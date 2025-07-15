@@ -6,7 +6,12 @@ import httpx
 from .base import AbstractAPIClient
 from application.core.config import settings
 from application.utils.rate_limiter import RateLimiter
-from application.models import SubtitleFile, SubtitleSearchResult, SubtitleSearchResults, Season
+from application.models import (
+    SubtitleFile,
+    SubtitleSearchResult,
+    SubtitleSearchResults,
+    Season
+)
 
 
 class OpenSubtitlesClient(AbstractAPIClient):
