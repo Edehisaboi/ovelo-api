@@ -88,10 +88,10 @@ class MongoCollectionsManager:
                     collection_type=collection_type
                 )
                 if embedding_dim and retriever:
-                    await indexer.create_vector_search_indexes(embedding_dim=embedding_dim)
+                    await indexer.create_vector_indexes(embedding_dim=embedding_dim)
                 else:
-                    await indexer.create_traditional_indexes()
-                logger.info(f"Indexes initialized for '{collection_type}'.")
+                    await indexer.create_indexes()
+                logger.info(f"Indexes initialized for '{collection_type}'")
             except Exception as e:
                 logger.error(f"Failed to initialize indexes for '{collection_type}': {e}")
 
@@ -118,7 +118,7 @@ class MongoCollectionsManager:
             )
         ]
         await asyncio.gather(*tasks)
-        logger.info("All collection indexes initialized.")
+        logger.info("All collection indexes initialized")
 
     def _initialize_collection_wrappers(self):
         """Initialize all collection wrappers using a helper to avoid duplication."""
