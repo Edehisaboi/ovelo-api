@@ -5,9 +5,6 @@ from typing import (
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorCollection
 
-from application.core.logging import get_logger
-
-logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -48,10 +45,9 @@ class CollectionWrapper(Generic[T]):
     ) -> Optional[T]:
         doc = await self.collection.find_one(filter_dict)
         if doc:
-            doc = self._transform_document_for_model(doc)
             if self.model == dict:
                 return doc
-            return self.model(**doc)
+            return self.model.model_validate(doc)
         return None
 
     async def find_many(
@@ -62,10 +58,10 @@ class CollectionWrapper(Generic[T]):
         cursor = self.collection.find(filter_dict)
         if limit:
             cursor = cursor.limit(limit)
-        docs = await cursor.to_list(length=limit or 1000)
+        docs = await cursor.to_list(length=limit or 100)
         if self.model == dict:
-            return [self._transform_document_for_model(doc) for doc in docs]
-        return [self.model(**self._transform_document_for_model(doc)) for doc in docs]
+            return [doc for doc in docs]
+        return [self.model.model_validate(doc) for doc in docs]
 
     async def update_one(
         self,
@@ -96,17 +92,3 @@ class CollectionWrapper(Generic[T]):
             return document
         else:
             raise ValueError("Document must be a Pydantic model instance or dict.")
-
-    # TODO: Add more methods as needed, e.g. for aggregation, indexing, etc.
-    # TODO: make generic for more complex models and move to utils
-    def _transform_document_for_model(self, doc: dict) -> dict:
-        transformed = doc.copy()
-        # For MovieDetails and TVDetails, map tmdb_id -> id, watch_providers -> watch/providers
-        if self.model.__name__ in ("MovieDetails", "TVDetails"):
-            if "tmdb_id" in transformed:
-                transformed["id"] = transformed["tmdb_id"]
-            if "watch_providers" in transformed:
-                transformed["watch/providers"] = transformed["watch_providers"]
-            elif "watch/providers" not in transformed:
-                transformed["watch/providers"] = {"results": {}}
-        return transformed
