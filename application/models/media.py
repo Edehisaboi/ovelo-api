@@ -1,21 +1,23 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict
 from typing import Optional, List, Dict
 from datetime import datetime, date
+
+from bson import ObjectId
 
 
 class SearchResult(BaseModel):
     tmdb_id:            int = Field(alias="id")
-    title:              Optional[str] = None  # For movies
-    name:               Optional[str] = None   # For TV shows
-    overview:           Optional[str] = None
-    poster_path:        Optional[str] = None
-    backdrop_path:      Optional[str] = None
-    media_type:         Optional[str] = None  # it's only provided for multi-search results
-    release_date:       Optional[str | date] = None  # For movies
-    first_air_date:     Optional[str | date] = None  # For TV shows
-    vote_average:       Optional[float] = None
-    vote_count:         Optional[int] = None
-    original_language:  Optional[str] = None
+    title:              Optional[str]         = None  # For movies
+    name:               Optional[str]         = None  # For TV shows
+    overview:           Optional[str]         = None
+    poster_path:        Optional[str]         = None
+    backdrop_path:      Optional[str]         = None
+    media_type:         Optional[str]         = None  # Only provided for multi-search results
+    release_date:       Optional[str | date]  = None  # For movies
+    first_air_date:     Optional[str | date]  = None  # For TV shows
+    vote_average:       Optional[float]       = None
+    vote_count:         Optional[int]         = None
+    original_language:  Optional[str]         = None
 
 class SearchResults(BaseModel):
     page:           int
@@ -111,6 +113,7 @@ class ExternalID(BaseModel):
     twitter_id:     Optional[str] = None
 
 class MovieDetails(BaseModel):
+    db_id:              Optional[str] = Field(default=None, alias="_id")
     tmdb_id:            int = Field(alias="id")
     adult:              bool
     title:              str
@@ -136,32 +139,55 @@ class MovieDetails(BaseModel):
     embedding_model:    Optional[str] = None
     vote_average:       float
     vote_count:         int
+    media_type:         str = "movie"
+
+    @field_validator('db_id', mode='before')
+    def convert_objectid_to_str(v):
+        if v and isinstance(v, ObjectId):
+            return str(v)
+        return v
+
+    model_config = ConfigDict(
+        populate_by_name=True
+    )
 
 class TVDetails(BaseModel):
-    tmdb_id:            int = Field(alias="id")
-    adult:              bool
-    name:               str
-    original_name:      str
-    homepage:           Optional[str] = None
-    overview:           str
-    poster_path:        Optional[str] = None
-    backdrop_path:      Optional[str] = None
-    first_air_date:     Optional[str | date] = None
-    last_air_date:      Optional[str | date] = None
-    number_of_seasons:  int
-    number_of_episodes: int
-    genres:             List[Genre]
-    seasons:            Optional[List[Season]] = None
-    status:             str
-    tagline:            Optional[str] = None
-    credits:            MovieCredits
-    images:             MovieImages
-    videos:             MovieVideos
-    watch_providers:    Optional[WatchProviders] = Field(default=None, alias="watch/providers")
-    embedding_model:    Optional[str] = None
-    external_ids:       ExternalID
-    origin_country:     List[str]
-    original_language:  str
-    spoken_languages:   List[SpokenLanguage]
-    vote_average:       float
-    vote_count:         int
+    db_id:               Optional[str] = Field(default=None, alias="_id")
+    tmdb_id:             int = Field(alias="id")
+    adult:               bool
+    name:                str
+    original_name:       str
+    homepage:            Optional[str] = None
+    overview:            str
+    poster_path:         Optional[str] = None
+    backdrop_path:       Optional[str] = None
+    first_air_date:      Optional[str | date] = None
+    last_air_date:       Optional[str | date] = None
+    number_of_seasons:   int
+    number_of_episodes:  int
+    genres:              List[Genre]
+    seasons:             Optional[List[Season]] = None
+    status:              str
+    tagline:             Optional[str] = None
+    credits:             MovieCredits
+    images:              MovieImages
+    videos:              MovieVideos
+    watch_providers:     Optional[WatchProviders] = Field(default=None, alias="watch/providers")
+    embedding_model:     Optional[str] = None
+    external_ids:        ExternalID
+    origin_country:      List[str]
+    original_language:   str
+    spoken_languages:    List[SpokenLanguage]
+    vote_average:        float
+    vote_count:          int
+    media_type:          str = "tv"
+
+    @field_validator('db_id', mode='before')
+    def convert_objectid_to_str(v):
+        if v and isinstance(v, ObjectId):
+            return str(v)
+        return v
+
+    model_config = ConfigDict(
+        populate_by_name=True
+    )
