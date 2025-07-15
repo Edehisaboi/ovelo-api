@@ -22,21 +22,18 @@ logger = get_logger(__name__)
 class SearchRequest(BaseModel):
     """Request model for search operations."""
     query:          str
-    limit:          int = settings.MAX_RESULTS_PER_PAGE
+    limit:          int
     include_movies: bool = True
     include_tv:     bool = True
-    exact_match:    bool = False
-    language:       Optional[str] = settings.TMDB_LANGUAGE
-    country:        Optional[str] = None
 
 
 class SearchResponse(BaseModel):
     """Response model for search operations."""
-    query:          str
-    movies:         List[MovieDetails]
-    tv_shows:       List[TVDetails]
-    tmdb_search:    Optional[SearchResults] = None
-    total_results:  int
+    query:      str
+    movies:     List[MovieDetails] = []
+    tv:         List[TVDetails] = []
+    tmdb:       Optional[SearchResults] = None
+    total:      int
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -52,26 +49,21 @@ async def search_media(
 
     try:
         # Search the database for movies and TV shows
-        db_results = await search_by_title(
+        db_movie, db_tv = await search_by_title(
             manager=mongodb_manager,
             query=request.query,
-            exact_match=request.exact_match,
-            language=request.language,
-            country=request.country,
             limit = request.limit
         )
     except Exception as e:
         logger.error(f"Error searching database: {e}")
         raise HTTPException(status_code=500, detail="Database search failed.")
 
-    total_db_results = (
-        len(db_results["movies"]) +
-        len(db_results["tv_shows"])
-        if db_results else 0
+    total = (
+        len(db_movie) + len(db_tv)
     )
 
-    if not db_results or total_db_results < request.limit:
-        logger.info("No results found in database or insufficient results, falling back to TMDb API.")
+    if (not db_movie and not db_tv) or total < request.limit:
+        logger.info("No results found in database or insufficient results, falling back to TMDb API")
         try:
             tmdb_results: Optional[SearchResults] = None
 
@@ -104,10 +96,10 @@ async def search_media(
             # Compose empty or partial DB results, but always provide query and total_results for consistency
             return SearchResponse(
                 query=request.query,
-                movies=db_results["movies"] if db_results else [],
-                tv_shows=db_results["tv_shows"] if db_results else [],
-                tmdb_search=tmdb_results,
-                total_results=len(tmdb_results.results) if tmdb_results else 0,
+                movies=db_movie,
+                tv=db_tv,
+                tmdb=tmdb_results,
+                total= total + (tmdb_results.total_results if tmdb_results else 0)
             )
         except Exception as e:
             logger.error(f"Error searching TMDb API: {e}")
@@ -116,8 +108,8 @@ async def search_media(
     # Database results are sufficient
     return SearchResponse(
         query=request.query,
-        movies=db_results["movies"],
-        tv_shows=db_results["tv_shows"],
-        tmdb_search=None,
-        total_results=total_db_results
+        movies=db_movie,
+        tv=db_tv,
+        tmdb=None,
+        total=total
     )
