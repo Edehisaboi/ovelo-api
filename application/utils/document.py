@@ -16,6 +16,7 @@ def extract_movie_collections(movie: MovieDetails) -> dict:
     """
     movie_doc = movie.model_dump(
         exclude={
+            'db_id',
             'transcript_chunks',
             'watch_providers'
         }
@@ -73,6 +74,7 @@ def extract_tv_collections(tv: TVDetails) -> dict:
     """
     tv_show_doc = tv.model_dump(
         exclude={
+            'db_id',
             'seasons',
             'watch_providers'
         }
