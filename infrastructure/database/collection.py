@@ -25,18 +25,24 @@ class CollectionWrapper(Generic[T]):
         self,
         document: Union[T, dict]
     ) -> str:
-        """Insert a single document and return its ID."""
+        """Insert a single document and return its ID. Raises if insertion fails."""
         doc_dict = self._serialize_document(document)
         result = await self.collection.insert_one(doc_dict)
+        if not result.inserted_id:
+            raise RuntimeError(f"Failed to insert document: {doc_dict}")
         return str(result.inserted_id)
 
     async def insert_many(
         self,
         documents: List[Union[T, dict]]
     ) -> List[str]:
-        """Insert multiple documents and return their IDs."""
+        """Insert multiple documents and return their IDs. Raises if insertion fails or IDs missing."""
         doc_dicts = [self._serialize_document(doc) for doc in documents]
         result = await self.collection.insert_many(doc_dicts)
+        if not result.inserted_ids or len(result.inserted_ids) != len(doc_dicts):
+            raise RuntimeError(
+                f"Failed to insert all documents: expected {len(doc_dicts)}, got {len(result.inserted_ids) if result.inserted_ids else 0}"
+            )
         return [str(id) for id in result.inserted_ids]
 
     async def find_one(

@@ -239,7 +239,6 @@ class MongoCollectionsManager:
     # --- High-Level Normalized Data Insertion ---
     async def insert_movie_document(self, movie: MovieDetails) -> str:
         """Insert a movie and all related data into normalized collections."""
-        # TODO: Validate movie data before insertion and make sure IDs are not none
         collections = extract_movie_collections(movie)
         movie_id = await self.movies.insert_one(
             collections[settings.MOVIES_COLLECTION]
@@ -263,7 +262,6 @@ class MongoCollectionsManager:
 
     async def insert_tv_show_document(self, tv_show: TVDetails) -> str:
         """Insert a TV show and all related data into normalized collections."""
-        # TODO: Validate TV show data before insertion and make sure IDs are not none
         collections = extract_tv_collections(tv_show)
         tv_show_id = await self.tv_shows.insert_one(
             collections[settings.TV_COLLECTION]
