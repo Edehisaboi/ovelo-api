@@ -1,7 +1,9 @@
 from typing import List, Dict, Any
 
 from motor.motor_asyncio import AsyncIOMotorCollection
+
 from pymongo import ASCENDING, TEXT, IndexModel
+from pymongo.operations import SearchIndexModel
 from pymongo.errors import OperationFailure
 
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
@@ -67,12 +69,34 @@ class MongoIndex:
             # Drop all indexes before creating the vector index
             await self.drop_all_indexes()
 
-            vectorstore = self.retriever.vectorstore
-            if not vectorstore:
+            vector_store = self.retriever.vectorstore
+            if not vector_store:
                 raise ValueError("Vectorstore is not initialized.")
 
-            vectorstore.create_vector_search_index(dimensions=embedding_dim)
+            vector_store.create_vector_search_index(dimensions=embedding_dim)
             logger.info(f"Created vector search index for '{self.collection_type}'.")
+
+            if is_hybrid:
+                # Create full-text search index if hybrid search is enabled
+                await self.collection.create_search_index(
+                    model=SearchIndexModel(
+                        definition={
+                            "mappings": {
+                                "dynamic": False,
+                                "fields": {
+                                    vector_store._text_key: [
+                                        {
+                                            "type": "string"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        name=f"{self.collection_type}_fulltext_index",
+                        type="search"
+                    )
+                )
+                logger.info(f"Created full-text search index for '{self.collection_type}'.")
 
         except OperationFailure as e:
             logger.error(f"MongoDB OperationFailure during vector index creation: {e}")

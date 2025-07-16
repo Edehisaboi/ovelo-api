@@ -64,9 +64,9 @@ class Settings(BaseSettings):
 
     # ============= Vector Search Configuration =============
     """Vector search and embedding settings for similarity search."""
-    # Index names
-    MOVIE_INDEX_NAME:        str = "movie_index"
-    TV_INDEX_NAME:           str = "tv_index"
+    # Vector Index names
+    MOVIE_VECTOR_INDEX_NAME:        str = "movie_vector_index"
+    TV_VECTOR_INDEX_NAME:           str = "tv_vector_index"
 
     # Embedding paths
     MOVIE_EMBEDDING_PATH:    str = "embedding"

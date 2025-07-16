@@ -88,7 +88,10 @@ class MongoCollectionsManager:
                     collection_type=collection_type
                 )
                 if embedding_dim and retriever:
-                    await indexer.create_vector_indexes(embedding_dim=embedding_dim)
+                    await indexer.create_vector_indexes(
+                        embedding_dim=embedding_dim,
+                        is_hybrid=True
+                    )
                 else:
                     await indexer.create_indexes()
                 logger.info(f"Indexes initialized for '{collection_type}'")
@@ -152,6 +155,7 @@ class MongoCollectionsManager:
                 connection_string   = self.mongodb_uri,
                 embedding           = self.embedding_client.embeddings,
                 namespace           = f"{self.database_name}.{collection_name}",
+                index_name          = index_name,
                 text_key            = text_key,
                 embedding_key       = embedding_key,
                 relevance_score_fn  = similarity_metric,
@@ -169,7 +173,7 @@ class MongoCollectionsManager:
                 settings.MOVIE_CHUNKS_COLLECTION,
                 settings.MOVIE_TEXT_PATH,
                 settings.MOVIE_EMBEDDING_PATH,
-                settings.MOVIE_INDEX_NAME,
+                settings.MOVIE_VECTOR_INDEX_NAME,
                 settings.MOVIE_SIMILARITY,
                 settings.RAG_TOP_K
             ),
@@ -177,7 +181,7 @@ class MongoCollectionsManager:
                 settings.TV_CHUNKS_COLLECTION,
                 settings.TV_TEXT_PATH,
                 settings.TV_EMBEDDING_PATH,
-                settings.TV_INDEX_NAME,
+                settings.TV_VECTOR_INDEX_NAME,
                 settings.TV_SIMILARITY,
                 settings.RAG_TOP_K
             )
