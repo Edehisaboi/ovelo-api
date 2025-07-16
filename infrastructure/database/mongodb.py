@@ -12,6 +12,7 @@ from application.core.config import settings
 from application.core.logging import get_logger
 from application.models.media import MovieDetails, TVDetails
 from application.utils.document import extract_movie_collections, extract_tv_collections
+
 from external.clients import EmbeddingClient
 from infrastructure.database.collection import CollectionWrapper
 from infrastructure.database.indexes import MongoIndex
@@ -90,7 +91,7 @@ class MongoCollectionsManager:
                 if embedding_dim and retriever:
                     await indexer.create_vector_indexes(
                         embedding_dim=embedding_dim,
-                        is_hybrid=False
+                        is_hybrid=True
                     )
                 else:
                     await indexer.create_indexes()
@@ -150,20 +151,21 @@ class MongoCollectionsManager:
             logger.warning("Embedding client not configured. Skipping retriever setup.")
             return
 
-        async def set_retriever(collection_name, text_key, embedding_key, index_name, similarity_metric, top_k):
+        async def set_retriever(collection_name, text_key, embedding_key, vector_index_name, text_index_name, similarity_metric, top_k):
             vectorstore = MongoDBAtlasVectorSearch.from_connection_string(
                 connection_string   = self.mongodb_uri,
                 embedding           = self.embedding_client.embeddings,
                 namespace           = f"{self.database_name}.{collection_name}",
-                index_name          = index_name,
+                index_name          = vector_index_name,
                 text_key            = text_key,
                 embedding_key       = embedding_key,
                 relevance_score_fn  = similarity_metric,
             )
             self._retrievers[collection_name] = MongoDBAtlasHybridSearchRetriever(
                 vectorstore=vectorstore,
-                search_index_name=index_name,
+                search_index_name=text_index_name,
                 top_k=top_k,
+                oversampling_factor=settings.OVERSAMPLING_FACTOR,
                 vector_penalty=settings.VECTOR_PENALTY,
                 fulltext_penalty=settings.FULLTEXT_PENALTY
             )
@@ -174,6 +176,7 @@ class MongoCollectionsManager:
                 settings.MOVIE_TEXT_PATH,
                 settings.MOVIE_EMBEDDING_PATH,
                 settings.MOVIE_VECTOR_INDEX_NAME,
+                settings.MOVIE_FULLTEXT_INDEX_NAME,
                 settings.MOVIE_SIMILARITY,
                 settings.RAG_TOP_K
             ),
@@ -182,6 +185,7 @@ class MongoCollectionsManager:
                 settings.TV_TEXT_PATH,
                 settings.TV_EMBEDDING_PATH,
                 settings.TV_VECTOR_INDEX_NAME,
+                settings.TV_FULLTEXT_INDEX_NAME,
                 settings.TV_SIMILARITY,
                 settings.RAG_TOP_K
             )

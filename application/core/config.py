@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     MOVIE_VECTOR_INDEX_NAME:        str = "movie_vector_index"
     TV_VECTOR_INDEX_NAME:           str = "tv_vector_index"
 
+    # Full-text Index names
+    MOVIE_FULLTEXT_INDEX_NAME:      str = f"{MOVIE_CHUNKS_COLLECTION}_fulltext_index"
+    TV_FULLTEXT_INDEX_NAME:         str = f"{TV_CHUNKS_COLLECTION}_fulltext_index"
+
     # Embedding paths
     MOVIE_EMBEDDING_PATH:    str = "embedding"
     TV_EMBEDDING_PATH:       str = "embedding"
@@ -98,9 +102,10 @@ class Settings(BaseSettings):
     DEFAULT_SORT_ORDER:      int = -1  # -1 for descending, 1 for ascending
 
     """Vector search settings."""
-    RAG_TOP_K:          int = 5
-    VECTOR_PENALTY:     int = 50
-    FULLTEXT_PENALTY:   int = 50
+    RAG_TOP_K:              int = 5
+    VECTOR_PENALTY:         int = 50
+    FULLTEXT_PENALTY:       int = 20
+    OVERSAMPLING_FACTOR:    int = 5 # This times RAG_TOP_K is the number of candidates chosen at each step
 
     # ============= Text Processing Configuration =============
     """Text chunking and processing settings."""
