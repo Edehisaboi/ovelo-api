@@ -90,7 +90,7 @@ class MongoCollectionsManager:
                 if embedding_dim and retriever:
                     await indexer.create_vector_indexes(
                         embedding_dim=embedding_dim,
-                        is_hybrid=True
+                        is_hybrid=False
                     )
                 else:
                     await indexer.create_indexes()

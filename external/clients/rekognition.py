@@ -4,9 +4,9 @@ from pydantic import BaseModel
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError, ParamValidationError
-import os
 
 from application.core.logging import get_logger
+from application.core.config import settings
 
 logger = get_logger(__name__)
 
@@ -41,11 +41,12 @@ class RekognitionClient:
                 max_attempts=2,
             )
         )
-        region = os.getenv('AWS_REGION', 'us-east-2')
         self._client = boto3.client(
             'rekognition',
             config=config,
-            region_name=region,
+            region_name=settings.AWS_REGION,
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
         )
 
     def recognize_actors(self, image_bytes: bytes) -> RecognitionResponse:

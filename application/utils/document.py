@@ -23,7 +23,6 @@ def extract_movie_collections(movie: MovieDetails) -> dict:
     )
 
     # Add metadata
-    movie_doc["media_type"] = "movie"
     movie_doc["created_at"] = datetime.now(UTC)
     movie_doc["updated_at"] = datetime.now(UTC)
     movie_doc["embedding_model"] = settings.OPENAI_EMBEDDING_MODEL
@@ -81,7 +80,6 @@ def extract_tv_collections(tv: TVDetails) -> dict:
     )
 
     # Add metadata
-    tv_show_doc["media_type"] = "tv"
     tv_show_doc["created_at"] = datetime.now(UTC)
     tv_show_doc["updated_at"] = datetime.now(UTC)
     tv_show_doc["embedding_model"] = settings.OPENAI_EMBEDDING_MODEL

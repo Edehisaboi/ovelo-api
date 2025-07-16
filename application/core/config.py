@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     OPENAI_STT_BASE_URL:             str  = "wss://api.openai.com/v1/audio/transcriptions"
     OPENAI_STT_MODEL:                str  = "gpt-4o-transcribe"
 
+    # ========== AWS Rekognition Configuration =======
+    AWS_ACCESS_KEY_ID:          str
+    AWS_SECRET_ACCESS_KEY:      str
+    AWS_REGION:                 str = "us-east-1"
+
     # ============= TMDb API Configuration =============
     """TMDb API settings for movie and TV show data."""
     TMDB_BASE_URL:           str = "https://api.themoviedb.org/3"
