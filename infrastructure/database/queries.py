@@ -1,4 +1,4 @@
-from typing import List, Dict, Union, Tuple, Optional
+from typing import List, Dict, Tuple, Optional
 
 from langchain_core.documents import Document
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
@@ -105,11 +105,11 @@ async def vector_search(
     query:      str,
     limit:      int = settings.MAX_RESULTS_PER_PAGE,
     filter_criteria: Optional[Dict] = None
-) -> Union[List[Tuple[Document, float]], List[Document], None]:
+) -> Optional[List[Tuple[Document, float]]]:
     try:
         if not retriever:
             raise ValueError(
-                "Hybrid search retriever not initialized for this collection."
+                "Vector search retriever not initialized for this collection."
             )
         vector_store = retriever.vectorstore
 
@@ -120,12 +120,33 @@ async def vector_search(
                 k=limit,
                 pre_filter=filter_criteria
             )
-        else:
-            # Returns List[Document]
-            documents = await retriever.ainvoke(query)
-
-        return documents
+            return documents
+        return None
 
     except Exception as e:
         logger.error(f"Error performing vector search: {e}")
+        raise
+
+async def hybrid_search(
+    retriever:  MongoDBAtlasHybridSearchRetriever,
+    query:      str,
+    limit:      int = settings.MAX_RESULTS_PER_PAGE,
+    filter_criteria: Optional[Dict] = None
+) -> List[Document]:
+    try:
+        if not retriever:
+            raise ValueError(
+                "Hybrid-vector search retriever not initialized for this collection."
+            )
+
+        # Returns List[Document]
+        documents: List[Document] = await retriever.ainvoke(
+            input=query,
+            k=limit,
+            pre_filter=filter_criteria
+        )
+        return documents
+
+    except Exception as e:
+        logger.error(f"Error performing hybrid-vector search: {e}")
         raise
