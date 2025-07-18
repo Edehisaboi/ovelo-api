@@ -37,19 +37,19 @@ class MongoIndex:
 
             # Define new indexes
             indexes = [
-                IndexModel([("tmdb_id", ASCENDING)], unique=True, name="tmdbid"),
+                IndexModel([("tmdb_id", ASCENDING)], unique=True, name="tmdbID"),
                 IndexModel([("genres.name", ASCENDING)], name="genre"),
                 IndexModel([("original_language", ASCENDING)], name="language"),
-                IndexModel([("spoken_languages.name", ASCENDING)], name="languages"),
+                IndexModel([("spoken_languages.name", ASCENDING)], name="spokenLanguages"),
                 IndexModel([("origin_country", ASCENDING)], name="country"),
             ]
             if self.collection_type == settings.MOVIES_COLLECTION:
                 indexes.append(
-                    IndexModel([("title", TEXT), ("original_title", TEXT)], name="titletext")
+                    IndexModel([("title", TEXT), ("original_title", TEXT)], name="titleText")
                 )
             elif self.collection_type == settings.TV_COLLECTION:
                 indexes.append(
-                    IndexModel([("name", TEXT), ("original_name", TEXT)], name="nametext")
+                    IndexModel([("name", TEXT), ("original_name", TEXT)], name="nameText")
                 )
 
             # Create all indexes at once

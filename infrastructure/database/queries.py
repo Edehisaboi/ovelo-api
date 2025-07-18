@@ -129,9 +129,7 @@ async def vector_search(
 
 async def hybrid_search(
     retriever:  MongoDBAtlasHybridSearchRetriever,
-    query:      str,
-    limit:      int = settings.MAX_RESULTS_PER_PAGE,
-    filter_criteria: Optional[Dict] = None
+    query:      str
 ) -> List[Document]:
     try:
         if not retriever:
@@ -140,11 +138,7 @@ async def hybrid_search(
             )
 
         # Returns List[Document]
-        documents: List[Document] = await retriever.ainvoke(
-            input=query,
-            k=limit,
-            pre_filter=filter_criteria
-        )
+        documents: List[Document] = await retriever.ainvoke(query)
         return documents
 
     except Exception as e:
