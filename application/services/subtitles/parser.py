@@ -121,17 +121,35 @@ class SRTParser:
         Parse SRT content and return a list of reconstructed sentences/paragraphs,
         not just lines. This enables semantically meaningful chunking.
         """
-        lines = srt_content.split('\n')
-        dialogue_lines = []
+        blocks, current_block = [], []
 
-        # Step 1: Remove all SRT numbers, timestamps, empty lines. Clean text.
-        for line in lines:
+        # First, group lines into subtitle blocks
+        for line in srt_content.split('\n'):
             line = line.strip()
-            if not line or self.line_number_pattern.match(line) or self.timestamp_pattern.match(line):
+            if line == '':
+                if current_block:
+                    blocks.append(current_block)
+                    current_block = []
+            else:
+                current_block.append(line)
+        if current_block:
+            blocks.append(current_block)
+
+        dialogue_lines = []
+        for block in blocks:
+            # Remove line number and timestamp lines
+            block_lines = [
+                l for l in block
+                if not self.line_number_pattern.match(l)
+                and not self.timestamp_pattern.match(l)
+            ]
+            if not block_lines:
                 continue
-            if self._is_music_line(line) and remove_music:
+            # Join lines back into a single string (with space or nothing)
+            text = ' '.join(block_lines)
+            if remove_music and self._is_music_line(text):
                 continue
-            cleaned_line = self._clean_text(line)
+            cleaned_line = self._clean_text(text)
             if cleaned_line:
                 dialogue_lines.append(cleaned_line)
 
