@@ -13,6 +13,7 @@ from application.services.media import tmdb_service
 from application.data.generator import generate_data
 
 from infrastructure.database import search_by_title
+from infrastructure.database import hybrid_search
 
 router = APIRouter()
 
@@ -34,6 +35,19 @@ class SearchResponse(BaseModel):
     tv:         List[TVDetails] = []
     tmdb:       Optional[SearchResults] = None
     total:      int
+
+
+class VectorSearchRequest(BaseModel):
+    query: str
+    collection: str  # 'movie_chunks' or 'tv_chunks'
+
+class VectorSearchResult(BaseModel):
+    document: dict
+
+class VectorSearchResponse(BaseModel):
+    query: str
+    results: list[VectorSearchResult]
+    total: int
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -73,14 +87,11 @@ async def search_media(
             elif request.include_movies:
                 tmdb_results = await tmdb_service.search_movies(
                     query=request.query,
-                    language=request.language or settings.TMDB_LANGUAGE,
-                    include_adult=True,
-                    region=request.country
+                    include_adult=True
                 )
             elif request.include_tv:
                 tmdb_results = await tmdb_service.search_tv_shows(
                     query=request.query,
-                    language=request.language or settings.TMDB_LANGUAGE,
                     include_adult=True
                 )
 
@@ -113,3 +124,44 @@ async def search_media(
         tmdb=None,
         total=total
     )
+
+
+@router.post("/vector-search", response_model=VectorSearchResponse)
+async def vector_search_endpoint(
+    request: VectorSearchRequest,
+    mongodb_manager = Depends(mongo_manager)
+):
+    """
+    Perform a vector-based semantic search over movie or TV chunks.
+    """
+    logger.info(f"Vector search: {request.query} in {request.collection}")
+    # Select retriever
+    if request.collection == settings.MOVIE_CHUNKS_COLLECTION:
+        retriever = mongodb_manager.movie_chunks_retriever
+
+    elif request.collection == settings.TV_CHUNKS_COLLECTION:
+        retriever = mongodb_manager.tv_chunks_retriever
+
+    else:
+        raise HTTPException(status_code=400, detail="Invalid collection. Use 'movie_chunks' or 'tv_chunks'.")
+
+    try:
+        results = await hybrid_search(
+            retriever=retriever,
+            query=request.query
+        )
+        response_results = []
+        if results is None:
+            results = []
+
+        for item in results:
+            response_results.append(VectorSearchResult(document=item.model_dump()))
+
+        return VectorSearchResponse(
+            query=request.query,
+            results=response_results,
+            total=len(response_results)
+        )
+    except Exception as e:
+        logger.error(f"Error in vector search: {e}")
+        raise HTTPException(status_code=500, detail="Vector search failed.")
