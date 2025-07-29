@@ -86,4 +86,8 @@ class FaceDetector:
     #     if not self.known_encodings:
     #         return False
     #     distances = face_recognition.face_distance(self.known_encodings, encoding)
-    #     return np.any(distances < self.tolerance) 
+    #     return np.any(distances < self.tolerance)
+
+
+# Create singleton instances
+face_detector = FaceDetector()
