@@ -147,14 +147,14 @@ class MongoCollectionsManager:
 
     async def _initialize_retrievers(self):
         """Initialize vector/hybrid search retrievers for chunk collections."""
-        if not self.embedding_client or not self.embedding_client.embeddings:
+        if not self.embedding_client or not self.embedding_client.embedding:
             logger.warning("Embedding client not configured. Skipping retriever setup.")
             return
 
         async def set_retriever(collection_name, text_key, embedding_key, vector_index_name, text_index_name, similarity_metric, top_k):
             vectorstore = MongoDBAtlasVectorSearch.from_connection_string(
                 connection_string   = self.mongodb_uri,
-                embedding           = self.embedding_client.embeddings,
+                embedding           = self.embedding_client.embedding,
                 namespace           = f"{self.database_name}.{collection_name}",
                 index_name          = vector_index_name,
                 text_key            = text_key,
