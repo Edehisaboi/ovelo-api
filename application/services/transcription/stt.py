@@ -1,6 +1,9 @@
 import asyncio
+
 from typing import AsyncGenerator, Optional, Callable
+
 from application.core.logging import get_logger
+from application.core.dependencies import stt_client
 from external.clients.openai import OpenAISTT
 
 logger = get_logger(__name__)
@@ -9,8 +12,10 @@ logger = get_logger(__name__)
 class STTService:
     """Speech-to-Text service using OpenAI's realtime API."""
     
-    def __init__(self, stt_client: Optional[OpenAISTT] = None):
-        self.stt_client = stt_client or OpenAISTT()
+    def __init__(self, client: Optional[OpenAISTT] = None):
+        if client is None:
+            client = stt_client()
+        self.stt_client = client
         
     async def transcribe_microphone(
         self,
@@ -138,4 +143,8 @@ class STTService:
             logger.error(error_msg)
             if on_error:
                 on_error(error_msg)
-            yield {"type": "error", "error": error_msg} 
+            yield {"type": "error", "error": error_msg}
+
+
+# Create singleton instance
+stt_service = STTService()
