@@ -7,7 +7,7 @@ from external.clients import (
     OpenSubtitlesClient,
     TMDbClient,
     EmbeddingClient,
-    OpenAISTT,
+    OpenAIRealtimeSTTClient,
     RekognitionClient
 )
 from application.utils.rate_limiter import RateLimiter
@@ -53,8 +53,8 @@ def opensubtitles_client() -> OpenSubtitlesClient:
     )
 
 @lru_cache()
-def stt_client() -> OpenAISTT:
-    return OpenAISTT(
+def stt_client() -> OpenAIRealtimeSTTClient:
+    return OpenAIRealtimeSTTClient(
         api_key=settings.OPENAI_API_KEY,
         http_client=httpx.AsyncClient(),
         base_url=settings.OPENAI_STT_BASE_URL
