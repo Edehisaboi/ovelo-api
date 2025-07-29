@@ -8,7 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from application.models.media import TranscriptChunk
 from application.core.config import settings
 from application.core.logging import get_logger
-from application.core.resources import embedding_client
+from application.core.dependencies import embedding_client
 
 from .parser import SRTParser
 from .validator import SubtitleValidator
@@ -44,7 +44,7 @@ class SubtitleProcessor:
         self._validator = SubtitleValidator()
 
         self._chunker = SemanticChunker(
-            embeddings=embedding_client.embeddings,
+            embeddings=embedding_client().embedding,
             buffer_size=settings.CHUNK_BUFFER_SIZE,
             breakpoint_threshold_type=settings.CHUNK_BREAKPOINT_TYPE,
             breakpoint_threshold_amount=settings.CHUNK_BREAKPOINT_AMOUNT,
@@ -187,3 +187,7 @@ class SubtitleProcessor:
         except Exception as e:
             logger.error(f"Error processing subtitle file chunks: {str(e)}")
             raise
+
+
+# Create singleton instance
+subtitle_processor = SubtitleProcessor()
