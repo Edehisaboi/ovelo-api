@@ -1,9 +1,10 @@
-from typing import List
+from typing import List, Optional
 
-from external.clients.openai import EmbeddingClient
 from application.models import TranscriptChunk
 from application.core.logging import get_logger
-from application.core.resources import embedding_client
+from application.core.dependencies import embedding_client
+
+from external.clients.openai import EmbeddingClient
 
 logger = get_logger(__name__)
 
@@ -11,32 +12,10 @@ logger = get_logger(__name__)
 class EmbeddingService:
     """Service for handling text embeddings and transcript processing."""
 
-    def __init__(self, client: EmbeddingClient = embedding_client):
+    def __init__(self, client: Optional[EmbeddingClient] = None):
+        if client is None:
+            client = embedding_client()
         self.client = client
-
-    async def get_embedding(self, text: str) -> List[float]:
-        """Generate embedding for a single text"""
-        if not text or not text.strip():
-            raise ValueError("Text cannot be empty")
-
-        try:
-            embedding = await self.client.create_embedding(text)
-            return embedding
-        except Exception as e:
-            logger.error(f"Error getting embedding: {str(e)}")
-            raise
-
-    async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for multiple texts."""
-        if not texts:
-            return []
-
-        try:
-            embeddings = await self.client.create_embeddings(texts)
-            return embeddings
-        except Exception as e:
-            logger.error(f"Error getting embeddings: {str(e)}")
-            raise
 
     async def update_with_embeddings(
         self,
@@ -49,7 +28,7 @@ class EmbeddingService:
 
         try:
             texts = [tc.text.lower() for tc in transcript_chunks]
-            embeddings = await self.get_embeddings(texts)
+            embeddings = await self.client.embedding.aembed_documents(texts)
             
             return [
                 transcript_chunk.model_copy(update={"embedding": embedding})
