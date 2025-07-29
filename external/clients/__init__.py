@@ -1,6 +1,6 @@
 from .tmdb import TMDbClient
 from .opensubtitles import OpenSubtitlesClient
-from .openai import  EmbeddingClient, OpenAISTT
+from .openai import  EmbeddingClient, OpenAIRealtimeSTTClient
 from .rekognition import RekognitionClient
 
 __all__ = [
@@ -8,6 +8,6 @@ __all__ = [
     "OpenSubtitlesClient",
     "TMDbClient",
     "EmbeddingClient",
-    "OpenAISTT",
+    "OpenAIRealtimeSTTClient",
     "RekognitionClient",
 ] 

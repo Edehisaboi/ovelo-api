@@ -35,7 +35,7 @@ class AbstractAPIClient(BaseAPIClient):
         api_key:        str,
         http_client:    httpx.AsyncClient,
         base_url:       str,
-        rate_limiter:   'RateLimiter'
+        rate_limiter:   Optional['RateLimiter'] = None
     ) -> None:
         self.http_client   = http_client
         self._api_key      = api_key
@@ -48,7 +48,8 @@ class AbstractAPIClient(BaseAPIClient):
         params:     Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Make a GET request to the API with rate limiting."""
-        await self._rate_limiter.acquire()
+        if self._rate_limiter:
+            await self._rate_limiter.acquire()
         params = params or {}
         
         response = await self.http_client.get(
@@ -65,7 +66,8 @@ class AbstractAPIClient(BaseAPIClient):
         json_body:  Dict[str, Any]
     ) -> Dict[str, Any]:
         """Make a POST request to the API with rate limiting."""
-        await self._rate_limiter.acquire()
+        if self._rate_limiter:
+            await self._rate_limiter.acquire()
         
         response = await self.http_client.post(
             f"{self._base_url}/{endpoint.lstrip('/')}",
@@ -78,4 +80,4 @@ class AbstractAPIClient(BaseAPIClient):
     @abstractmethod
     def _get_headers(self) -> Dict[str, str]:
         """Get the headers for API requests."""
-        pass 
+        pass
