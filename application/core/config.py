@@ -25,8 +25,10 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_WAIT_MAX:       int  = 10
     OPENAI_EMBEDDING_TIMEOUT:        int  = 30
 
-    OPENAI_STT_BASE_URL:             str  = "wss://api.openai.com/v1/audio/transcriptions"
+    OPENAI_STT_BASE_URL:             str  = "https://api.openai.com/v1/realtime"
+    OPENAI_STT_WS_BASE_URL:          str  = "wss://api.openai.com/v1/realtime"
     OPENAI_STT_MODEL:                str  = "gpt-4o-transcribe"
+    OPENAI_STT_LANGUAGE:             str  = "en"
 
     # ========== AWS Rekognition Configuration =======
     AWS_ACCESS_KEY_ID:          str
@@ -90,8 +92,8 @@ class Settings(BaseSettings):
     TV_NUM_DIMENSIONS:       int = 1536
 
     # Similarity metrics
-    MOVIE_SIMILARITY:        str = "cosine"
-    TV_SIMILARITY:           str = "cosine"
+    MOVIE_SIMILARITY:        str = "dotProduct"
+    TV_SIMILARITY:           str = "dotProduct"
 
     # ============= Search Configuration =============
     """Search and result limiting settings."""
@@ -102,8 +104,8 @@ class Settings(BaseSettings):
     DEFAULT_SORT_ORDER:      int = -1  # -1 for descending, 1 for ascending
 
     """Vector search settings."""
-    RAG_TOP_K:              int = 5
-    VECTOR_PENALTY:         int = 50
+    RAG_TOP_K:              int = 3
+    VECTOR_PENALTY:         int = 30
     FULLTEXT_PENALTY:       int = 20
     OVERSAMPLING_FACTOR:    int = 5 # This times RAG_TOP_K is the number of candidates chosen at each step
 
@@ -111,7 +113,7 @@ class Settings(BaseSettings):
     """Text chunking and processing settings."""
     CHUNK_BREAKPOINT_TYPE:    Literal["percentile", "standard_deviation", "interquartile", "gradient"] = "percentile"
     CHUNK_BREAKPOINT_AMOUNT:  float = 95.0
-    CHUNK_SIZE:               int = 2000 # The max is 8191
+    CHUNK_SIZE:               int = 500 # The max is 8191
     CHUNK_BUFFER_SIZE:        int = 1
     MIN_CHUNK_WORDS:          int = 5
     CHUNK_OVERLAP_PERCENT:    float = 0.15  # 15% overlap between chunks

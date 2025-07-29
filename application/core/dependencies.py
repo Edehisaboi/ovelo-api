@@ -12,18 +12,16 @@ from external.clients import (
 )
 from application.utils.rate_limiter import RateLimiter
 from application.core.logging import get_logger
-from infrastructure.database import MongoCollectionsManager, create_mongo_collections_manager
+from infrastructure.database import create_mongo_collections_manager
 
 logger = get_logger(__name__)
 
-
-
 @lru_cache()
-def get_embedding_client() -> EmbeddingClient:
+def embedding_client() -> EmbeddingClient:
     return EmbeddingClient()
 
 @lru_cache()
-def get_tmdb_client() -> TMDbClient:
+def tmdb_client() -> TMDbClient:
     from application.utils.rate_limiter import RateLimitConfig
     return TMDbClient(
         api_key=settings.TMDB_API_KEY,
@@ -39,7 +37,7 @@ def get_tmdb_client() -> TMDbClient:
     )
 
 @lru_cache()
-def get_opensubtitles_client() -> OpenSubtitlesClient:
+def opensubtitles_client() -> OpenSubtitlesClient:
     from application.utils.rate_limiter import RateLimitConfig
     return OpenSubtitlesClient(
         api_key=settings.OPENSUBTITLES_API_KEY,
@@ -55,61 +53,51 @@ def get_opensubtitles_client() -> OpenSubtitlesClient:
     )
 
 @lru_cache()
-def get_stt_client() -> OpenAISTT:
-    return OpenAISTT()
+def stt_client() -> OpenAISTT:
+    return OpenAISTT(
+        api_key=settings.OPENAI_API_KEY,
+        http_client=httpx.AsyncClient(),
+        base_url=settings.OPENAI_STT_BASE_URL
+    )
 
 @lru_cache()
-def get_rekognition_client() -> RekognitionClient:
+def rekognition_client() -> RekognitionClient:
     return RekognitionClient()
 
+@lru_cache()
+def _mongo_manager_singleton():
+    lock = asyncio.Lock()
+    instance = {"manager": None}
 
-# ---- Async Singleton for MongoCollectionsManager ----
+    async def get_instance():
+        async with lock:
+            if instance["manager"] is None:
+                instance["manager"] = await create_mongo_collections_manager(
+                    database_name=settings.MONGODB_DB,
+                    mongodb_uri=settings.MONGODB_URL,
+                    embedding_client=embedding_client()
+                )
+            return instance["manager"]
+    return get_instance
 
-_mongo_manager_instance = None
-_mongo_manager_lock = asyncio.Lock()
-
-async def get_mongo_manager() -> MongoCollectionsManager:
-    """
-    Async singleton for MongoCollectionsManager.
-    Ensures only one instance is created and reused.
-    """
-    global _mongo_manager_instance
-    async with _mongo_manager_lock:
-        if _mongo_manager_instance is None:
-            _mongo_manager_instance = await create_mongo_collections_manager(
-                database_name=settings.MONGODB_DB,
-                mongodb_uri=settings.MONGODB_URL,
-                embedding_client=get_embedding_client()
-            )
-    return _mongo_manager_instance
-
-
-
-# ---- Close Database Connections ----
+mongo_manager = _mongo_manager_singleton()
 
 async def close_database_connections():
-    """Close all database connections (if needed)."""
     try:
-        global _mongo_manager_instance
-        if _mongo_manager_instance:
-            await _mongo_manager_instance.close()
-            _mongo_manager_instance = None
+        manager = await mongo_manager()
+        if manager:
+            await manager.close()
+            _mongo_manager_singleton.cache_clear()
         logger.info("Database connections closed.")
     except Exception as e:
         logger.error(f"Error closing database connections: {e}")
 
-
 __all__ = [
-    # MongoDB Manager
-    "get_mongo_manager",
-
-    # Clients
-    "get_embedding_client",
-    "get_stt_client",
-    "get_tmdb_client",
-    "get_opensubtitles_client",
-    "get_rekognition_client",
-
-    # Utility Functions
+    "mongo_manager",
+    "embedding_client",
+    "stt_client",
+    "tmdb_client",
+    "opensubtitles_client",
+    "rekognition_client",
     "close_database_connections",
 ]

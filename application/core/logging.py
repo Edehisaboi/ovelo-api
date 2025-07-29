@@ -1,45 +1,38 @@
 from loguru import logger
+
 from application.core.config import settings
 from pathlib import Path
 
 def setup_logging():
-    """
-    Set up loguru logging configuration for the application.
-    Creates a log directory if it doesn't exist and configures loguru handlers.
-    """
     log_dir = Path(settings.LOG_DIR)
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / settings.LOG_FILE
 
     logger.remove()
-    # Use loguru format syntax for file logging
+    # File logging with rotation/retention
     logger.add(
-        log_file, 
-        rotation=settings.LOG_MAX_BYTES, 
-        retention=settings.LOG_BACKUP_COUNT, 
-        level=settings.LOG_LEVEL, 
-        format="{time:YYYY-MM-DD HH:mm:ss} - {name} - {level} - {message}", 
+        log_file,
+        rotation=settings.LOG_MAX_BYTES,
+        retention=settings.LOG_BACKUP_COUNT,
+        level=settings.LOG_LEVEL,
+        format="{time:YYYY-MM-DD HH:mm:ss} - {level} - {module}:{function}:{line} - {message}",
         encoding='utf-8'
     )
-    # Use loguru format syntax for console output
+    # Console logging: just add it—no lambda! Loguru handles the coloring/format
     logger.add(
-        lambda msg: print(msg, end=''), 
-        level=settings.LOG_LEVEL, 
-        format="{time:HH:mm:ss} - {level} - {message}"
+        sys.stderr,
+        level=settings.LOG_LEVEL,
+        # You can use Loguru's colorful default or provide a format (colors are supported)
+        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{module}:{function}:{line}</cyan> - <level>{message}</level>"
     )
     return logger
 
 def get_logger(name: str):
-    """
-    Get a loguru logger instance for a specific module.
-    Args:
-        name: Name of the module (usually __name__)
-    Returns:
-        loguru.Logger: Configured logger instance
-    """
     return logger.bind(module=name)
 
-# Initialize logging when a module is imported
+# Ensure sys is imported for sys.stderr
+import sys
+
 setup_logging()
 
-__all__ = ['setup_logging', 'get_logger', 'logger'] 
+__all__ = ['setup_logging', 'get_logger', 'logger']
