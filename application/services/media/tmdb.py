@@ -162,4 +162,9 @@ class TMDbService:
             return await self.client.tv.watch_providers(tv_id)
         except Exception as e:
             logger.error(f"Error getting TV watch providers: {e}")
-            raise 
+            raise
+
+
+# Create singleton instance
+from application.core.dependencies import tmdb_client
+tmdb_service = TMDbService(tmdb_client())
