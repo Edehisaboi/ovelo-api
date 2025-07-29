@@ -2,7 +2,7 @@ import asyncio
 from typing import List, Optional
 
 from application.core.logging import get_logger
-from application.core.resources import opensubtitles_client
+from application.core.dependencies import opensubtitles_client
 from application.models import (
     Episode,
     MovieDetails,
@@ -13,8 +13,8 @@ from application.models import (
     TVDetails
 )
 from application.services.embeddings import embedding_service
-from application.services.media import tmdb_service
-from application.services.subtitles import subtitle_processor
+from application.services.media.tmdb import tmdb_service
+from application.services.subtitles.processor import subtitle_processor
 from application.core.config import settings
 
 logger = get_logger(__name__)
@@ -44,13 +44,13 @@ class Extractor:
             if not movie_details:
                 raise LookupError(f"No TMDb data found for movie ID {movie_id}.")
 
-            subtitle_search_result: SubtitleSearchResult = await opensubtitles_client.search.by_tmdb(movie_id)
+            subtitle_search_result: SubtitleSearchResult = await opensubtitles_client().search.by_tmdb(movie_id)
             if not subtitle_search_result.attributes.files:
                 raise LookupError(f"No subtitles found for movie ID {movie_id}.")
 
             subtitle_file: SubtitleFile = subtitle_search_result.attributes.files[0]
             async with get_opensubtitles_download_semaphore():
-                downloaded_subtitle: SubtitleFile = await opensubtitles_client.subtitles.download(subtitle_file)
+                downloaded_subtitle: SubtitleFile = await opensubtitles_client().subtitles.download(subtitle_file)
                 if not downloaded_subtitle or not downloaded_subtitle.subtitle_text:
                     raise IOError(f"Subtitle download failed for movie ID {movie_id}.")
 
@@ -84,7 +84,7 @@ class Extractor:
             if not tv_details:
                 raise LookupError(f"No TMDb data found for TV ID {tv_id}.")
 
-            subtitle_search_results: List[Optional[SubtitleSearchResult]] = await opensubtitles_client.search.all_parent_search(
+            subtitle_search_results: List[Optional[SubtitleSearchResult]] = await opensubtitles_client().search.all_parent_search(
                 parent_type="TMDB",
                 parent_id=tv_id,
                 seasons=tv_details.seasons
@@ -187,7 +187,7 @@ class Extractor:
         try:
             async with get_opensubtitles_download_semaphore():
                 subtitle_file: SubtitleFile = subtitle_search_result.attributes.files[0]
-                downloaded_subtitle: SubtitleFile = await opensubtitles_client.subtitles.download(subtitle_file)
+                downloaded_subtitle: SubtitleFile = await opensubtitles_client().subtitles.download(subtitle_file)
                 if not downloaded_subtitle or not downloaded_subtitle.subtitle_text:
                     logger.warning(f"Subtitle download failed for S{episode.season_number}E{episode.episode_number}")
                     return episode

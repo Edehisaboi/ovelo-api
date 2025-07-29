@@ -12,7 +12,7 @@ from application.models import (
 )
 from application.data.extract import Extractor
 from application.core.logging import get_logger
-from application.core.resources import mongo_manager
+from application.core.dependencies import mongo_manager
 
 from infrastructure.database.mongodb import MongoCollectionsManager
 
