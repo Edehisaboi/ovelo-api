@@ -3,7 +3,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import StreamingResponse
 import json
 
-from application.services.transcription import stt_service
+from application.services.transcription.stt import stt_service
 from application.core.logging import get_logger
 
 logger = get_logger(__name__)

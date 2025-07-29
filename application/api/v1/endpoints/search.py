@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from application.core.config import settings
-from application.core.resources import mongo_manager
+from application.core.dependencies import mongo_manager
 from application.core.logging import get_logger
 
 from application.models import MovieDetails, TVDetails, SearchResults
-from application.services.media import tmdb_service
+from application.services.media.tmdb import tmdb_service
 
 from application.data.generator import generate_data
 
