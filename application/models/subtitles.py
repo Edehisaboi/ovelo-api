@@ -26,15 +26,15 @@ class SubtitleFile(BaseModel):
 
 class SubtitleFileInfo(BaseModel):
     subtitle_id:        int
-    language:           str
-    download_count:     int
-    new_download_count: int
-    hd:                 bool
+    language:           Optional[str] = None
+    download_count:     Optional[int] = None
+    new_download_count: Optional[int] = None
+    hd:                 Optional[bool] = None
     fps:                Optional[float] = None
-    from_trusted:       bool
-    url:                str
+    from_trusted:       Optional[bool] = None
+    url:                Optional[str] = None
     feature_details:    Optional[FeatureDetails] = None
-    files:              List[SubtitleFile]
+    files:              Optional[List[SubtitleFile]] = None
 
 class SubtitleSearchResult(BaseModel):
     id:         int
