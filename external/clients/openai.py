@@ -1,9 +1,9 @@
-from typing import Optional, Dict, Any, List
+import json
+import asyncio
+import websockets
 
-import httpx
 from langchain_openai import OpenAIEmbeddings
 
-from .base import AbstractAPIClient
 from application.core.config import settings
 from application.core.logging import get_logger
 
@@ -33,94 +33,81 @@ class EmbeddingClient:
         return self._embeddings
 
 
-class OpenAIRealtimeSTTClient(AbstractAPIClient):
-    """API client for creating OpenAI Realtime Transcription sessions."""
-
-    MODEL = settings.OPENAI_STT_MODEL
-    LANGUAGE = settings.OPENAI_STT_LANGUAGE
-    PROMPT = settings.OPENAI_STT_PROMPT
-    EXPIRE_SECONDS = settings.OPENAI_STT_TOKEN_EXPIRY
-    AUDIO_FORMAT = settings.OPENAI_STT_INPUT_AUDIO_FORMAT
-    NOISE_REDUCTION_TYPE = settings.OPENAI_STT_NOISE_REDUCTION_TYPE
-    TURN_DETECTION_TYPE = settings.OPENAI_STT_TURN_DETECTION_TYPE
-    TURN_DETECTION_THRESHOLD = settings.OPENAI_STT_TURN_DETECTION_THRESHOLD
-    TURN_DETECTION_PREFIX_PADDING_MS = settings.OPENAI_STT_TURN_DETECTION_PREFIX_PADDING_MS
-    TURN_DETECTION_SILENCE_DURATION_MS = settings.OPENAI_STT_TURN_DETECTION_SILENCE_DURATION_MS
-    MODALITIES = settings.OPENAI_STT_MODALITIES
-
+class OpenAIRealtimeSTTClient:
     def __init__(
         self,
         api_key:        str,
-        http_client:    httpx.AsyncClient,
         base_url:       str,
     ) -> None:
-        super().__init__(api_key, http_client, base_url, None)
+        self.api_key = api_key
+        self.base_url = base_url
 
-    def _get_headers(self) -> Dict[str, str]:
-        """Return headers for OpenAI Realtime API requests."""
-        return {
-            "Authorization": f"Bearer {self._api_key}",
-            "Content-Type": "application/json"
+        self._header = {
+            "Authorization": f"Bearer {self.api_key}",
+            "OpenAI-Beta": "realtime=v1"
         }
 
-    async def create_stt_session(
-            self,
-            *,
-            model: str = MODEL,
-            language: str = LANGUAGE,
-            prompt: str = PROMPT,
-            expire_seconds: int = EXPIRE_SECONDS,
-            audio_format: str = AUDIO_FORMAT,
-            noise_reduction_type: Optional[str] = NOISE_REDUCTION_TYPE,
-            turn_detection_type: Optional[str] = TURN_DETECTION_TYPE,
-            turn_detection_threshold: float = TURN_DETECTION_THRESHOLD,
-            turn_detection_prefix_padding_ms: int = TURN_DETECTION_PREFIX_PADDING_MS,
-            turn_detection_silence_duration_ms: int = TURN_DETECTION_SILENCE_DURATION_MS,
-            modalities: Optional[List[str]] = None,
-            include: Optional[List[str]] = None,
-            extra_payload: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """Create a new OpenAI realtime transcription session."""
-        payload: Dict[str, Any] = {
-            "client_secret": {
-                "expires_at": {
-                    "anchor": "created_at",
-                    "seconds": expire_seconds
+    @staticmethod
+    def session_config(
+        model: str = settings.OPENAI_STT_MODEL,
+        language: str = settings.OPENAI_STT_LANGUAGE,
+        prompt: str = settings.OPENAI_STT_PROMPT,
+        input_audio_format: str = settings.OPENAI_STT_INPUT_AUDIO_FORMAT,
+        turn_detection: str = settings.OPENAI_STT_TURN_DETECTION_TYPE,
+        vad: float = settings.OPENAI_STT_TURN_DETECTION_THRESHOLD,
+        noise_reduction: str = settings.OPENAI_STT_NOISE_REDUCTION_TYPE,
+    ) -> dict:
+        return {
+            "type": "transcription_session.update",
+            "session": {
+                "input_audio_format": input_audio_format,
+                "input_audio_transcription": {
+                    "model": model,
+                    "language": language,
+                    "prompt": prompt,
+                },
+                "turn_detection": {
+                    "type": turn_detection,
+                    "threshold": vad
+                },
+                "input_audio_noise_reduction": {
+                    "type": noise_reduction,
                 }
             },
-            "input_audio_format": audio_format,
-            "input_audio_transcription": {
-                "model": model,
-                "language": language,
-                "prompt": prompt
-            },
-            "modalities": modalities or self.MODALITIES,
         }
 
-        # Optional: turn_detection (None disables VAD)
-        if turn_detection_type:
-            payload["turn_detection"] = {
-                "type": turn_detection_type,
-                "threshold": turn_detection_threshold,
-                "prefix_padding_ms": turn_detection_prefix_padding_ms,
-                "silence_duration_ms": turn_detection_silence_duration_ms
-            }
-        else:
-            payload["turn_detection"] = None
+    async def transcribe(
+        self,
+        audio_chunk_generator,
+        model: str = settings.OPENAI_STT_MODEL,
+        **kwargs: dict
+    ) -> None:
+        async with websockets.connect(self.base_url, additional_headers=self._header, max_size=None) as ws:
+            # send session config
+            config = self.session_config(model=model, **kwargs)
+            await ws.send(json.dumps(config))
+            logger.info("Transcription session config sent.")
 
-        # Optional: noise reduction
-        if noise_reduction_type:
-            payload["input_audio_noise_reduction"] = {"type": noise_reduction_type}
-        else:
-            payload["input_audio_noise_reduction"] = None
+            # Run sending audio and receiving transcript concurrently
+            await asyncio.gather(
+                self._send_audio(ws, audio_chunk_generator),
+                self._recv_transcripts(ws)
+            )
 
-        # Optional: include extra event fields
-        if include:
-            payload["include"] = include
+    async def _send_audio(self, ws, audio_chunk_generator):
+        logger.info("Starting audio streaming loop...")
+        async for chunk in audio_chunk_generator:
+            await ws.send({
+                "type": "input_audio_buffer.append",
+                "audio": chunk
+            })
+        # End of stream
+        await ws.send(json.dumps({"type": "input_audio_buffer.end"}))
+        logger.info("Audio streaming loop ended.")
 
-        # Merge any extra custom fields
-        if extra_payload:
-            payload.update(extra_payload)
-
-        # POST to /transcription_sessions
-        return await self.post("transcription_sessions", json_body=payload)
+    async def _recv_transcripts(self, ws):
+        async for msg in ws:
+            data = json.loads(msg)
+            if data.get("type") == settings.OPENAI_STT_COMPLETED:
+                transcript = data.get("transcript")
+                logger.info(f"Transcript: {transcript}")

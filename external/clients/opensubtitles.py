@@ -189,9 +189,14 @@ class SearchService:
             return None
 
         # Find the SubtitleSearchResult with the highest download_count
+        # Filter out results with None download_count and sort by download_count
+        valid_results = [r for r in search_results.results if r.attributes.download_count is not None]
+        if not valid_results:
+            return None
+            
         most_downloaded = max(
-            search_results.results,
-            key=lambda x: x.attributes.download_count,
+            valid_results,
+            key=lambda x: x.attributes.download_count if x.attributes.download_count is not None else 0,
             default=None
         )
         return most_downloaded
