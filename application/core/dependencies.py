@@ -1,6 +1,7 @@
 import asyncio
 import httpx
 from functools import lru_cache
+from typing import Any
 
 from application.core.config import settings
 from external.clients import (
@@ -56,8 +57,7 @@ def opensubtitles_client() -> OpenSubtitlesClient:
 def stt_client() -> OpenAIRealtimeSTTClient:
     return OpenAIRealtimeSTTClient(
         api_key=settings.OPENAI_API_KEY,
-        http_client=httpx.AsyncClient(),
-        base_url=settings.OPENAI_STT_BASE_URL
+        base_url=settings.OPENAI_STT_WS_BASE_URL
     )
 
 @lru_cache()
@@ -66,8 +66,9 @@ def rekognition_client() -> RekognitionClient:
 
 @lru_cache()
 def _mongo_manager_singleton():
+    from infrastructure.database.mongodb import MongoCollectionsManager
     lock = asyncio.Lock()
-    instance = {"manager": None}
+    instance: dict[str, MongoCollectionsManager | None] = {"manager": None}
 
     async def get_instance():
         async with lock:
@@ -82,6 +83,24 @@ def _mongo_manager_singleton():
 
 mongo_manager = _mongo_manager_singleton()
 
+@lru_cache()
+def _connection_manager_singleton():
+    """Singleton factory for ConnectionManager to manage all WebSocket connections."""
+    #TODO: Add a lock to the ConnectionManager singleton
+    lock = asyncio.Lock()
+    instance: dict[str, Any] = {"manager": None}
+
+    def get_instance():
+        if instance["manager"] is None:
+            from application.api.v1.ws_manager import ConnectionManager
+            instance["manager"] = ConnectionManager()
+            logger.info("ConnectionManager singleton instance created")
+        return instance["manager"]
+    
+    return get_instance
+
+connection_manager = _connection_manager_singleton()
+
 async def close_database_connections():
     try:
         manager = await mongo_manager()
@@ -92,12 +111,27 @@ async def close_database_connections():
     except Exception as e:
         logger.error(f"Error closing database connections: {e}")
 
+async def close_websocket_connections():
+    """Close all active WebSocket connections."""
+    try:
+        manager = connection_manager()
+        if manager:
+            # Close all active connections
+            connection_ids = list(manager.active_connections.keys())
+            for conn_id in connection_ids:
+                await manager.close_connection(conn_id)
+            logger.info(f"Closed {len(connection_ids)} WebSocket connections")
+    except Exception as e:
+        logger.error(f"Error closing WebSocket connections: {e}")
+
 __all__ = [
     "mongo_manager",
+    "connection_manager",
     "embedding_client",
     "stt_client",
     "tmdb_client",
     "opensubtitles_client",
     "rekognition_client",
     "close_database_connections",
+    "close_websocket_connections",
 ]

@@ -26,21 +26,16 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_TIMEOUT:        int  = 30
 
     """OpenAI Realtime Speech-to-Text Configuration."""
-    OPENAI_STT_BASE_URL:                str  = "https://api.openai.com/v1/realtime"
     OPENAI_STT_WS_BASE_URL:             str  = "wss://api.openai.com/v1/realtime"
     OPENAI_STT_MODEL:                   str  = "gpt-4o-transcribe"
     OPENAI_STT_LANGUAGE:                str  = "en"
-    OPENAI_STT_TOKEN_EXPIRY:            int  = 120  # Token expiry time in seconds
     OPENAI_STT_INPUT_AUDIO_FORMAT:      str = "pcm16"  # Options: pcm16, g711_ulaw, g711_alaw
     OPENAI_STT_NOISE_REDUCTION_TYPE:    str = "near_field"  # Options: near_field, far_field, or None
     OPENAI_STT_PROMPT:                  str = "Transcribe accurately"
     OPENAI_STT_TURN_DETECTION_TYPE:     str = "server_vad"  # Options: server_vad, semantic_vad, or None
-    OPENAI_STT_MODALITIES:              list = ["text"] # Options: ["text"], ["text", "audio"], etc.
-    OPENAI_STT_INCLUDE:                 list = []  # Example: ["item.input_audio_transcription.logprobs"]
-    OPENAI_STT_TURN_DETECTION_THRESHOLD:            float = 0.5
-    OPENAI_STT_TURN_DETECTION_PREFIX_PADDING_MS:    int = 300
-    OPENAI_STT_TURN_DETECTION_SILENCE_DURATION_MS:  int = 500
-    OPENAI_STT_INCLUDE_LOGPROBS:                    bool = False
+    OPENAI_STT_TURN_DETECTION_THRESHOLD:    float = 0.5
+    OPENAI_STT_EV_DELTA:                str = "conversation.item.input_audio_transcription.delta"
+    OPENAI_STT_COMPLETED:               str = "conversation.item.input_audio_transcription.completed"
 
     # ========== AWS Rekognition Configuration =======
     AWS_ACCESS_KEY_ID:          str
