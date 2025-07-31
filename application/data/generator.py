@@ -61,10 +61,12 @@ async def _should_skip_media(
         exists = await manager.model_exists(tmdb_id, settings.TV_COLLECTION)
 
     if exists:
+        logger.info(f"Skipping existing item ID: {search_result.tmdb_id}")
         return True
 
     # Not in database; check language
     if search_result.original_language != settings.TMDB_ALLOWED_LANGUAGE:
+        logger.info(f"Skipping item ID {search_result.tmdb_id} due to language restriction: {search_result.original_language}")
         return True  # Not allowed, skip
 
     return False  # Does not exist, and language allowed; process it
@@ -99,7 +101,6 @@ async def _process_search_result(
     """
     item_name = search_result.title or search_result.name or f"TMDB ID: {search_result.tmdb_id}"
     if await _should_skip_media(manager, search_result):
-        logger.info(f"Skipping existing item: {item_name} ID: {search_result.tmdb_id}")
         return None
 
     try:
