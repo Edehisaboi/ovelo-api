@@ -54,7 +54,7 @@ class ConnectionManager:
         if connection_id in self.active_connections:
             try:
                 await self.active_connections[connection_id].send_json({
-                    "status": "error",
+                    "type": "error",
                     "message": message or "Unexpected error occurred"
                 })
             except Exception as e:
