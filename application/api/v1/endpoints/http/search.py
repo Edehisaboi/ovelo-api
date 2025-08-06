@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -39,7 +40,6 @@ class SearchResponse(BaseModel):
 
 class VectorSearchRequest(BaseModel):
     query: str
-    collection: str  # 'movie_chunks' or 'tv_chunks'
 
 class VectorSearchResult(BaseModel):
     document: dict
@@ -96,6 +96,7 @@ async def search_media(
                 )
 
             # Ingest TMDb results into the database if they are not already present
+            # TODO: Turn to a background task
             if settings.INGESTION_ENABLED and tmdb_results is not None:
                 async for model in generate_data(tmdb_results, manager=mongodb_manager):
                     if model is not None:
@@ -131,36 +132,28 @@ async def vector_search_endpoint(
     request: VectorSearchRequest,
     mongodb_manager = Depends(mongo_manager)
 ):
-    """
-    Perform a vector-based semantic search over movie or TV chunks.
-    """
-    logger.info(f"Vector search: {request.query} in {request.collection}")
-    # Select retriever
-    if request.collection == settings.MOVIE_CHUNKS_COLLECTION:
-        retriever = mongodb_manager.movie_chunks_retriever
-
-    elif request.collection == settings.TV_CHUNKS_COLLECTION:
-        retriever = mongodb_manager.tv_chunks_retriever
-
-    else:
-        raise HTTPException(status_code=400, detail="Invalid collection. Use 'movie_chunks' or 'tv_chunks'.")
+    """Perform a vector-based semantic search over movie and TV chunks."""
+    logger.info(f"Vector search: {request.query}")
 
     try:
-        results = await hybrid_search(
-            retriever=retriever,
-            query=request.query
-        )
-        response_results = []
-        if results is None:
-            results = []
+        movie_task  = hybrid_search(mongodb_manager.movie_chunks_retriever, request.query)
+        tv_task     = hybrid_search(mongodb_manager.tv_chunks_retriever,    request.query)
 
-        for item in results:
-            response_results.append(VectorSearchResult(document=item.model_dump()))
+        # run both and collect exceptions
+        results = await asyncio.gather(movie_task, tv_task, return_exceptions=True)
+        errors = [r for r in results if isinstance(r, Exception)]
+        if errors:
+            for e in errors:
+                logger.error(f"Sub-search failed: {e}")
+            raise HTTPException(status_code=500, detail="One or more searches failed")
 
+        combined = [doc for sublist in results for doc in sublist]
+
+        resp_items = [VectorSearchResult(document=doc.model_dump()) for doc in combined]
         return VectorSearchResponse(
             query=request.query,
-            results=response_results,
-            total=len(response_results)
+            results=resp_items,
+            total=len(resp_items)
         )
     except Exception as e:
         logger.error(f"Error in vector search: {e}")
