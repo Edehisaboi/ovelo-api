@@ -61,8 +61,10 @@ def stt_client() -> OpenAIRealtimeSTTClient:
     )
 
 @lru_cache()
-def rekognition_client() -> RekognitionClient:
-    return RekognitionClient()
+async def rekognition_client() -> RekognitionClient:
+    client = RekognitionClient()
+    await client.__aenter__()
+    return client
 
 @lru_cache()
 def _mongo_manager_singleton():
@@ -84,7 +86,7 @@ def _mongo_manager_singleton():
 mongo_manager = _mongo_manager_singleton()
 
 @lru_cache()
-def _connection_manager_singleton():
+def _ws_connection_manager_singleton():
     """Singleton factory for ConnectionManager to manage all WebSocket connections."""
     #TODO: Add a lock to the ConnectionManager singleton
     lock = asyncio.Lock()
@@ -99,7 +101,7 @@ def _connection_manager_singleton():
     
     return get_instance
 
-connection_manager = _connection_manager_singleton()
+ws_connection_manager = _ws_connection_manager_singleton()
 
 async def close_database_connections():
     try:
@@ -114,7 +116,7 @@ async def close_database_connections():
 async def close_websocket_connections():
     """Close all active WebSocket connections."""
     try:
-        manager = connection_manager()
+        manager = ws_connection_manager()
         if manager:
             # Close all active connections
             connection_ids = list(manager.active_connections.keys())
@@ -124,9 +126,19 @@ async def close_websocket_connections():
     except Exception as e:
         logger.error(f"Error closing WebSocket connections: {e}")
 
+async def close_rekognition_client():
+    """Properly close and clear the single RekognitionClient instance."""
+    try:
+        client = await rekognition_client()
+        await client.__aexit__(None, None, None)
+        rekognition_client.cache_clear()
+        logger.info("Rekognition client closed.")
+    except Exception as e:
+        logger.error(f"Error closing Rekognition client: {e}")
+
 __all__ = [
     "mongo_manager",
-    "connection_manager",
+    "ws_connection_manager",
     "embedding_client",
     "stt_client",
     "tmdb_client",
