@@ -20,29 +20,29 @@ class RateLimiter:
         if not self._config.enabled:
             return
 
-        async with self._lock:
-            now = time.time()
+        # Retry loop: compute under lock; if we must sleep, do it outside the lock
+        while True:
+            async with self._lock:
+                now = time.time()
 
-            # Remove timestamps that are outside the rate window
-            while self._requests and now - self._requests[0] >= self._config.rate_window:
-                self._requests.popleft()
+                # Remove timestamps that are outside the rate window
+                while self._requests and now - self._requests[0] >= self._config.rate_window:
+                    self._requests.popleft()
 
-            # If at rate limit, wait until a slot is available
-            if len(self._requests) >= self._config.rate_limit:
+                # If there's capacity, record and return
+                if len(self._requests) < self._config.rate_limit:
+                    self._requests.append(now)
+                    return
+
+                # Compute sleep time until next slot frees up
                 sleep_time = self._requests[0] + self._config.rate_window - now
-                if sleep_time > 0:
-                    self._lock.release()          # Release lock while sleeping
-                    try:
-                        await asyncio.sleep(sleep_time)
-                    finally:
-                        await self._lock.acquire()
-                    now = time.time()
-                    # Remove anymore expired requests after waking
-                    while self._requests and now - self._requests[0] >= self._config.rate_window:
-                        self._requests.popleft()
 
-            # Record the timestamp of this request
-            self._requests.append(time.time())
+            # Sleep outside the lock to avoid deadlocks/starvation
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+            else:
+                # Yield control briefly before retrying
+                await asyncio.sleep(0)
 
     def reset(self) -> None:
         """Reset the rate limiter state (clears all request timestamps)."""
