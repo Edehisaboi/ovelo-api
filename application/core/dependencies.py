@@ -1,14 +1,14 @@
 import asyncio
 import httpx
 from functools import lru_cache
-from typing import Any
+from typing import Any, Optional
 
 from application.core.config import settings
 from external.clients import (
     OpenSubtitlesClient,
     TMDbClient,
     EmbeddingClient,
-    OpenAIRealtimeSTTClient,
+    AWSTranscribeRealtimeSTTClient,
     RekognitionClient
 )
 from application.utils.rate_limiter import RateLimiter
@@ -54,17 +54,21 @@ def opensubtitles_client() -> OpenSubtitlesClient:
     )
 
 @lru_cache()
-def stt_client() -> OpenAIRealtimeSTTClient:
-    return OpenAIRealtimeSTTClient(
-        api_key=settings.OPENAI_API_KEY,
-        base_url=settings.OPENAI_STT_WS_BASE_URL
-    )
+def aws_stt_client() -> AWSTranscribeRealtimeSTTClient:
+    return AWSTranscribeRealtimeSTTClient()
 
-@lru_cache()
+# Rekognition client singleton (async-safe, no lru_cache on async functions)
+_rekognition_instance: Optional[RekognitionClient] = None
+_rekognition_lock = asyncio.Lock()
+
 async def rekognition_client() -> RekognitionClient:
-    client = RekognitionClient()
-    await client.__aenter__()
-    return client
+    global _rekognition_instance
+    async with _rekognition_lock:
+        if _rekognition_instance is None:
+            client = RekognitionClient()
+            await client.__aenter__()
+            _rekognition_instance = client
+        return _rekognition_instance
 
 @lru_cache()
 def _mongo_manager_singleton():
@@ -78,7 +82,8 @@ def _mongo_manager_singleton():
                 instance["manager"] = await create_mongo_collections_manager(
                     database_name=settings.MONGODB_DB,
                     mongodb_uri=settings.MONGODB_URL,
-                    embedding_client=embedding_client()
+                    embedding_client=embedding_client(),
+                    initialize_indexes=False
                 )
             return instance["manager"]
     return get_instance
@@ -87,18 +92,36 @@ mongo_manager = _mongo_manager_singleton()
 
 @lru_cache()
 def _ws_connection_manager_singleton():
-    """Singleton factory for ConnectionManager to manage all WebSocket connections."""
-    #TODO: Add a lock to the ConnectionManager singleton
-    lock = asyncio.Lock()
+    """Thread-safe singleton factory for ConnectionManager to manage all WebSocket connections."""
+    # Use a threading lock to guard initialization across event loops/threads
+    try:
+        import threading
+    except Exception:
+        threading = None  # Fallback; should not happen in normal runtime
+
     instance: dict[str, Any] = {"manager": None}
+    init_lock = threading.Lock() if threading else None
 
     def get_instance():
-        if instance["manager"] is None:
+        nonlocal instance
+        if instance["manager"] is not None:
+            return instance["manager"]
+
+        # Double-checked locking
+        if init_lock:
+            with init_lock:
+                if instance["manager"] is None:
+                    from application.api.v1.ws_manager import ConnectionManager
+                    instance["manager"] = ConnectionManager()
+                    logger.info("ConnectionManager singleton instance created")
+        else:
+            # Fallback without lock
             from application.api.v1.ws_manager import ConnectionManager
             instance["manager"] = ConnectionManager()
-            logger.info("ConnectionManager singleton instance created")
+            logger.info("ConnectionManager singleton instance created (no lock)")
+
         return instance["manager"]
-    
+
     return get_instance
 
 ws_connection_manager = _ws_connection_manager_singleton()
@@ -128,10 +151,12 @@ async def close_websocket_connections():
 
 async def close_rekognition_client():
     """Properly close and clear the single RekognitionClient instance."""
+    global _rekognition_instance
     try:
-        client = await rekognition_client()
-        await client.__aexit__(None, None, None)
-        rekognition_client.cache_clear()
+        async with _rekognition_lock:
+            if _rekognition_instance is not None:
+                await _rekognition_instance.__aexit__(None, None, None)
+                _rekognition_instance = None
         logger.info("Rekognition client closed.")
     except Exception as e:
         logger.error(f"Error closing Rekognition client: {e}")
@@ -140,10 +165,11 @@ __all__ = [
     "mongo_manager",
     "ws_connection_manager",
     "embedding_client",
-    "stt_client",
+    "aws_stt_client",
     "tmdb_client",
     "opensubtitles_client",
     "rekognition_client",
     "close_database_connections",
     "close_websocket_connections",
+    "close_rekognition_client"
 ]

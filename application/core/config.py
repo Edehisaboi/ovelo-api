@@ -25,22 +25,15 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_WAIT_MAX:       int  = 10
     OPENAI_EMBEDDING_TIMEOUT:        int  = 30
 
-    """OpenAI Realtime Speech-to-Text Configuration."""
-    OPENAI_STT_WS_BASE_URL:             str  = "wss://api.openai.com/v1/realtime"
-    OPENAI_STT_MODEL:                   str  = "gpt-4o-transcribe"
-    OPENAI_STT_LANGUAGE:                str  = "en"
-    OPENAI_STT_INPUT_AUDIO_FORMAT:      str = "pcm16"  # Options: pcm16, g711_ulaw, g711_alaw
-    OPENAI_STT_NOISE_REDUCTION_TYPE:    str = "near_field"  # Options: near_field, far_field, or None
-    OPENAI_STT_PROMPT:                  str = "Transcribe accurately"
-    OPENAI_STT_TURN_DETECTION_TYPE:     str = "server_vad"  # Options: server_vad, semantic_vad, or None
-    OPENAI_STT_TURN_DETECTION_THRESHOLD:    float = 0.5
-    OPENAI_STT_EV_DELTA:                str = "conversation.item.input_audio_transcription.delta"
-    OPENAI_STT_COMPLETED:               str = "conversation.item.input_audio_transcription.completed"
-
     # ========== AWS Rekognition Configuration =======
     AWS_ACCESS_KEY_ID:          str
     AWS_SECRET_ACCESS_KEY:      str
     AWS_REGION:                 str = "us-east-1"
+    AWS_MAX_IMAGE_BYTES:        int = 5 * 1024 * 1024  # 5 MB limit for Rekognition images
+
+    """AWS Realtime Speech-to-Text Configuration."""
+    AWS_STT_LANGUAGE: str = "en-US"  # Default language for AWS STT
+    AWS_STT_INPUT_AUDIO_FORMAT: str = "pcm16"
 
     # ============= TMDb API Configuration =============
     """TMDb API settings for movie and TV show data."""
