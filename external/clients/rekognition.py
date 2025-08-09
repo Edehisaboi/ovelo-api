@@ -1,4 +1,3 @@
-import re
 import base64
 import binascii
 from typing import Dict, Any, List
@@ -64,39 +63,15 @@ class RekognitionClient:
         await self._client.__aexit__(exc_type, exc, tb)
 
     async def recognize_actors(self, image_base64: str) -> RecognitionResponse:
-        """
-        Asynchronously recognize celebrities in an image using Amazon Rekognition.
-
+        """Asynchronously recognize celebrities in an image using Amazon Rekognition.
         Args:
             image_base64: Base-64-encoded image data
-
         Returns:
-            RecognitionResponse containing a list of recognized celebrities
-
-        Raises:
-            ValueError: If the input image data is invalid or too large
-            ClientError: If the AWS Rekognition API call fails
-        """
-        # Ensure client is available
+            RecognitionResponse containing a list of recognized celebrities"""
         if self._client is None:
             raise RuntimeError("Rekognition client not initialized; use 'async with RekognitionClient()'")
 
-        # Decode Base-64 string to bytes
-        try:
-            image_bytes = base64.b64decode(image_base64, validate=True)
-        except binascii.Error:
-            logger.error("Invalid Base-64 string provided")
-            raise ValueError("Invalid Base-64 image data")
-
-        # Validate bytes
-        if not image_bytes:
-            logger.error("Decoded image bytes are empty")
-            raise ValueError("Image data is empty")
-
-        # Enforce size limit
-        if len(image_bytes) > settings.AWS_MAX_IMAGE_BYTES:
-            logger.error("Image size exceeds 5 MB limit: %d bytes", len(image_bytes))
-            raise ValueError("Image size exceeds the 5 MB limit for Rekognition")
+        image_bytes = self._base64_to_bytes(image_base64)
 
         try:
             response = await self._client.recognize_celebrities(Image={"Bytes": image_bytes})
@@ -111,6 +86,32 @@ class RekognitionClient:
             raise
 
         return self._format_response(response)
+
+    @staticmethod
+    def _base64_to_bytes(frame_b64: str) -> bytes:
+        """Convert a Base-64 encoded image file to bytes."""
+        # Strip data URL prefix if present
+        if isinstance(frame_b64, str) and frame_b64.startswith("data:"):
+            frame_b64 = frame_b64.split(",", 1)[1]
+
+        # Fix missing padding (common in streamed chunks)
+        missing = (-len(frame_b64)) % 4
+        if missing:
+            frame_b64 += "=" * missing
+
+        # Decode Base-64 string to bytes
+        try:
+            frame_bytes = base64.b64decode(frame_b64.strip())
+        except binascii.Error:
+            logger.error("Invalid Base-64 string provided")
+            raise ValueError("Invalid Base-64 image data")
+
+        # Enforce size limit
+        if len(frame_bytes) > settings.AWS_MAX_IMAGE_BYTES:
+            logger.error("Image size exceeds 5 MB limit: %d bytes", len(frame_bytes))
+            raise ValueError("Image size exceeds the 5 MB limit for Rekognition")
+
+        return frame_bytes
 
     @staticmethod
     def _format_response(response: Dict[str, Any]) -> RecognitionResponse:
