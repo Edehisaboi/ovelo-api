@@ -1,4 +1,8 @@
-from typing import List, Dict, Tuple, Optional
+from bson import ObjectId
+from bson.errors import InvalidId
+from typing import List, Literal, Dict, Tuple, Optional
+
+from pymongo.collation import Collation
 
 from langchain_core.documents import Document
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
@@ -100,6 +104,104 @@ async def search_by_title(
         raise
 
 
+async def has_actors(
+    manager: MongoCollectionsManager,
+    id: str,
+    actors: List[str],
+    media: Literal['movie', 'tv']
+) -> dict[str, bool | list[str]]:
+    """Return whether all specified actors exist for this title and which are missing."""
+    if media == "movie":
+        coll = manager.movies.collection
+    elif media == "tv":
+        coll = manager.tv_shows.collection
+    else:
+        raise ValueError("media must be 'movie' or 'tv'")
+
+    try:
+        oid = ObjectId(id)
+    except InvalidId:
+        # bad id -> treat as not found
+        return {"exists": False, "missing": list(actors)}
+
+    try:
+        pipeline = [
+            {
+                '$match': {
+                    '_id': oid
+                }
+            }, {
+                '$project': {
+                    'result': {
+                        '$let': {
+                            'vars': {
+                                'cast': {
+                                    '$setUnion': [
+                                        [], {
+                                            '$map': {
+                                                'input': {
+                                                    '$ifNull': [
+                                                        '$credits.cast', []
+                                                    ]
+                                                },
+                                                'as': 'c',
+                                                'in': {
+                                                    '$trim': {
+                                                        'input': '$$c.name'
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                },
+                                'query': {
+                                    '$setUnion': [
+                                        [],
+                                        actors
+                                    ]
+                                }
+                            },
+                            'in': {
+                                'missing': {
+                                    '$setDifference': [
+                                        '$$query', '$$cast'
+                                    ]
+                                },
+                                'exists': {
+                                    '$eq': [
+                                        {
+                                            '$size': {
+                                                '$setDifference': [
+                                                    '$$query', '$$cast'
+                                                ]
+                                            }
+                                        }, 0
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }, {
+                '$replaceRoot': {
+                    'newRoot': '$result'
+                }
+            }
+        ]
+
+        collation = Collation(locale="en", strength=1, normalization=True)
+        cursor = coll.aggregate(pipeline, collation=collation)
+        result = await cursor.to_list(length=1)
+        if not result:
+            return {"exists": False, "missing": actors}
+        return result[0]
+
+    except Exception as e:
+        logger.error(f"Error checking actors in database: {str(e)}")
+        raise
+
+
+
 async def vector_search(
     retriever:  MongoDBAtlasHybridSearchRetriever,
     query:      str,
@@ -125,22 +227,4 @@ async def vector_search(
 
     except Exception as e:
         logger.error(f"Error performing vector search: {e}")
-        raise
-
-async def hybrid_search(
-    retriever:  MongoDBAtlasHybridSearchRetriever,
-    query:      str
-) -> List[Document]:
-    try:
-        if not retriever:
-            raise ValueError(
-                "Hybrid-vector search retriever not initialized for this collection."
-            )
-
-        # Returns List[Document]
-        documents: List[Document] = await retriever.ainvoke(query)
-        return documents
-
-    except Exception as e:
-        logger.error(f"Error performing hybrid-vector search: {e}")
         raise
