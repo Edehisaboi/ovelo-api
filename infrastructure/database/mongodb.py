@@ -1,10 +1,11 @@
 import asyncio
-from typing import TypeVar, Optional, Dict, Type
+from typing import List, TypeVar, Optional, Dict, Type
 
 from typing_extensions import Self
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
+from langchain_core.documents import Document
 from langchain_mongodb import MongoDBAtlasVectorSearch
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
@@ -164,7 +165,7 @@ class MongoCollectionsManager:
             self._retrievers[collection_name] = MongoDBAtlasHybridSearchRetriever(
                 vectorstore=vectorstore,
                 search_index_name=text_index_name,
-                top_k=top_k,
+                k=top_k,
                 oversampling_factor=settings.OVERSAMPLING_FACTOR,
                 vector_penalty=settings.VECTOR_PENALTY,
                 fulltext_penalty=settings.FULLTEXT_PENALTY
@@ -240,6 +241,41 @@ class MongoCollectionsManager:
     def tv_chunks_retriever(self) -> Optional[MongoDBAtlasHybridSearchRetriever]:
         return self._retrievers.get(settings.TV_CHUNKS_COLLECTION)
 
+    # ---- Vector retrievers for hybrid search ---
+    async def perform_hybrid_search(self, query: str) -> List[Document]:
+        try:
+            # Perform searches in parallel
+            movie_task  = self._hybrid_search(self.movie_chunks_retriever,  query)
+            tv_task     = self._hybrid_search(self.tv_chunks_retriever,     query)
+
+            results = await asyncio.gather(movie_task, tv_task, return_exceptions=True)
+            errors = [r for r in results if isinstance(r, Exception)]
+            if errors:
+                for e in errors:
+                    logger.error(f"Sub-search failed: {e}")
+                raise ValueError("One or more searches failed")
+
+            return [doc for sublist in results for doc in sublist]
+        except:
+            logger.error(f"Error in hybrid search: {query}")
+            raise
+
+    async def _hybrid_search(
+        self,
+        retriever: MongoDBAtlasHybridSearchRetriever,
+        query: str
+    ) -> List[Document]:
+        try:
+            if not retriever:
+                raise ValueError(
+                    "Vector search retriever not initialized for this collection."
+                )
+            documents: List[Document] = await retriever.ainvoke(query)
+            return documents
+        except Exception as e:
+            logger.error(f"Error performing hybrid search: {e}")
+            raise
+
     # --- High-Level Normalized Data Insertion ---
     async def insert_movie_document(self, movie: MovieDetails) -> str:
         """Insert a movie and all related data into normalized collections."""
@@ -292,6 +328,7 @@ class MongoCollectionsManager:
             ep_key = (chunk["season_number"], chunk["episode_number"])
             episode_id = episode_keys_to_id.get(ep_key)
             if episode_id:
+                chunk["tv_show_id"] = tv_show_id
                 chunk["episode_id"] = episode_id
                 await self.tv_chunks.insert_one(chunk)
 
