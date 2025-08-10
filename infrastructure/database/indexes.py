@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from pymongo import ASCENDING, TEXT, IndexModel
 from pymongo.operations import SearchIndexModel
 from pymongo.errors import OperationFailure
+from pymongo.collation import Collation
 
 from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
@@ -29,11 +30,12 @@ class MongoIndex:
         self.collection_type = collection_type
 
     async def create_indexes(self) -> None:
-        """Drops all existing indexes and recreates required indexes for this collection.
-        This ensures the index state is always as defined here."""
+        """Drops all existing indexes and recreates required indexes for this collection."""
         try:
-            # Drop all indexes first
             await self.drop_all_indexes()
+
+            # Collation for case + accent insensitive matches (José == Jose)
+            ci_collation = Collation(locale="en", strength=1, normalization=True)
 
             # Define new indexes
             indexes = [
@@ -42,6 +44,9 @@ class MongoIndex:
                 IndexModel([("original_language", ASCENDING)], name="language"),
                 IndexModel([("spoken_languages.name", ASCENDING)], name="spokenLanguages"),
                 IndexModel([("origin_country", ASCENDING)], name="country"),
+                IndexModel([("credits.cast.name", ASCENDING)],
+                           name="castName_ci",
+                           collation=ci_collation),
             ]
             if self.collection_type == settings.MOVIES_COLLECTION:
                 indexes.append(
