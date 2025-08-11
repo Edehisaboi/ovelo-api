@@ -4,7 +4,7 @@ from application.models import TranscriptChunk
 from application.core.logging import get_logger
 from application.core.dependencies import embedding_client
 
-from external.clients.openai import EmbeddingClient
+from external.clients.embedding import EmbeddingClient
 
 logger = get_logger(__name__)
 
