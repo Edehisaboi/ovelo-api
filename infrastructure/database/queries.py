@@ -1,6 +1,6 @@
 from bson import ObjectId
 from bson.errors import InvalidId
-from typing import List, Literal, Dict, Tuple, Optional
+from typing import List, Literal, Dict, Tuple, Optional, Any
 
 from pymongo.collation import Collation
 
@@ -106,11 +106,14 @@ async def search_by_title(
 
 async def has_actors(
     manager: MongoCollectionsManager,
-    id: str,
+    ids:    List[str],
     actors: List[str],
-    media: Literal['movie', 'tv']
+    media:  Literal['movie', 'tv']
 ) -> dict[str, bool | list[str]]:
     """Return whether all specified actors exist for this title and which are missing."""
+    if not ids:
+        return {}
+
     if media == "movie":
         coll = manager.movies.collection
     elif media == "tv":
@@ -118,24 +121,33 @@ async def has_actors(
     else:
         raise ValueError("media must be 'movie' or 'tv'")
 
-    try:
-        oid = ObjectId(id)
-    except InvalidId:
-        # bad id -> treat as not found
-        return {"exists": False, "missing": list(actors)}
+    oids = []
+    id_map: Dict[str, str] = {}
+    for s in ids:
+        try:
+            oid = ObjectId(s)
+            oids.append(oid)
+            id_map[str(oid)] = s
+        except InvalidId:
+            pass
+
+    if not oids:
+        return {s: {"exists": False, "missing": list(actors)} for s in ids}
 
     try:
         pipeline = [
             {
                 '$match': {
-                    '_id': oid
+                    '_id': {
+                        '$in': oids
+                    }
                 }
             }, {
                 '$project': {
                     'result': {
                         '$let': {
                             'vars': {
-                                'cast': {
+                                'cast_lower': {
                                     '$setUnion': [
                                         [], {
                                             '$map': {
@@ -146,34 +158,73 @@ async def has_actors(
                                                 },
                                                 'as': 'c',
                                                 'in': {
-                                                    '$trim': {
-                                                        'input': '$$c.name'
+                                                    '$toLower': {
+                                                        '$trim': {
+                                                            'input': '$$c.name'
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
                                     ]
                                 },
-                                'query': {
+                                'query_raw': {
                                     '$setUnion': [
-                                        [],
-                                        actors
+                                        [], actors
                                     ]
                                 }
                             },
                             'in': {
                                 'missing': {
-                                    '$setDifference': [
-                                        '$$query', '$$cast'
-                                    ]
+                                    '$map': {
+                                        'input': {
+                                            '$filter': {
+                                                'input': '$$query_raw',
+                                                'as': 'q',
+                                                'cond': {
+                                                    '$not': {
+                                                        '$in': [
+                                                            {
+                                                                '$toLower': {
+                                                                    '$trim': {
+                                                                        'input': '$$q'
+                                                                    }
+                                                                }
+                                                            }, '$$cast_lower'
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        'as': 'q',
+                                        'in': {
+                                            '$trim': {
+                                                'input': '$$q'
+                                            }
+                                        }
+                                    }
                                 },
                                 'exists': {
                                     '$eq': [
                                         {
                                             '$size': {
-                                                '$setDifference': [
-                                                    '$$query', '$$cast'
-                                                ]
+                                                '$filter': {
+                                                    'input': '$$query_raw',
+                                                    'as': 'q',
+                                                    'cond': {
+                                                        '$not': {
+                                                            '$in': [
+                                                                {
+                                                                    '$toLower': {
+                                                                        '$trim': {
+                                                                            'input': '$$q'
+                                                                        }
+                                                                    }
+                                                                }, '$$cast_lower'
+                                                            ]
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }, 0
                                     ]
@@ -184,22 +235,28 @@ async def has_actors(
                 }
             }, {
                 '$replaceRoot': {
-                    'newRoot': '$result'
+                    'newRoot': {
+                        'id': '$_id',
+                        'result': '$result'
+                    }
                 }
             }
         ]
 
         collation = Collation(locale="en", strength=1, normalization=True)
-        cursor = coll.aggregate(pipeline, collation=collation)
-        result = await cursor.to_list(length=1)
-        if not result:
-            return {"exists": False, "missing": actors}
-        return result[0]
+        cur = coll.aggregate(pipeline, collation=collation)
+        rows = await cur.to_list(length=None)
+
+        out: Dict[str, Dict[str, Any]] = {s: {"exists": False, "missing": list(actors)} for s in ids}
+        for r in rows:
+            oid_str = str(r["id"])
+            key = id_map.get(oid_str, oid_str)
+            out[key] = r["result"]
+        return out
 
     except Exception as e:
         logger.error(f"Error checking actors in database: {str(e)}")
         raise
-
 
 
 async def vector_search(
