@@ -1,1 +1,1 @@
-# WebSocket endpoints package 
+# WebSocket endpoints package
