@@ -105,23 +105,23 @@ async def search_by_title(
 
 
 async def has_actors(
-    manager: MongoCollectionsManager,
-    ids:    List[str],
-    actors: List[str],
-    media:  Literal['movie', 'tv']
-) -> dict[str, bool | list[str]]:
-    """Return whether all specified actors exist for this title and which are missing."""
+    mongo_db: MongoCollectionsManager,
+    ids:      List[str],
+    actors:   List[str],
+    media:    Literal['movie', 'tv']
+) -> Dict[str, Dict[str, Any]]:
+    """Return presence info for each id: {id: {"exists": bool, "missing": [names...]}}"""
     if not ids:
         return {}
 
     if media == "movie":
-        coll = manager.movies.collection
+        coll = mongo_db.movies.collection
     elif media == "tv":
-        coll = manager.tv_shows.collection
+        coll = mongo_db.tv_shows.collection
     else:
         raise ValueError("media must be 'movie' or 'tv'")
 
-    oids = []
+    oids: List[ObjectId] = []
     id_map: Dict[str, str] = {}
     for s in ids:
         try:
