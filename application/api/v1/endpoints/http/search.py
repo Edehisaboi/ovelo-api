@@ -1,4 +1,3 @@
-import asyncio
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,7 +13,6 @@ from application.services.media.tmdb import tmdb_service
 from application.data.generator import generate_data
 
 from infrastructure.database import search_by_title
-from infrastructure.database import hybrid_search
 
 router = APIRouter()
 
@@ -136,20 +134,8 @@ async def vector_search_endpoint(
     logger.info(f"Vector search: {request.query}")
 
     try:
-        movie_task  = hybrid_search(mongodb_manager.movie_chunks_retriever, request.query)
-        tv_task     = hybrid_search(mongodb_manager.tv_chunks_retriever,    request.query)
-
-        # run both and collect exceptions
-        results = await asyncio.gather(movie_task, tv_task, return_exceptions=True)
-        errors = [r for r in results if isinstance(r, Exception)]
-        if errors:
-            for e in errors:
-                logger.error(f"Sub-search failed: {e}")
-            raise HTTPException(status_code=500, detail="One or more searches failed")
-
-        combined = [doc for sublist in results for doc in sublist]
-
-        resp_items = [VectorSearchResult(document=doc.model_dump()) for doc in combined]
+        results = await mongodb_manager.perform_hybrid_search(request.query)
+        resp_items = [VectorSearchResult(document=doc.model_dump()) for doc in results]
         return VectorSearchResponse(
             query=request.query,
             results=resp_items,
