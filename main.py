@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Moovzmatch - Media Identification System
+Moovzmatch - Media vRecognition System
 
 A sophisticated FastAPI-based application for movie and TV show identification
 using speech-to-text, vector embeddings, and multiple external APIs.

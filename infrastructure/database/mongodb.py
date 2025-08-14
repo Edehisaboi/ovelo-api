@@ -92,7 +92,7 @@ class MongoCollectionsManager:
                 if embedding_dim and retriever:
                     await indexer.create_vector_indexes(
                         embedding_dim=embedding_dim,
-                        is_hybrid=True
+                        is_hybrid=True if collection_type == settings.MOVIE_CHUNKS_COLLECTION else False, # todo: remove, currently only movies have hybrid search
                     )
                 else:
                     await indexer.create_indexes()
