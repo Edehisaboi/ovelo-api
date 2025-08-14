@@ -78,8 +78,7 @@ class _AWSResultHandler(TranscriptResultStreamHandler):
 
 
 class AWSTranscribeRealtimeSTTClient:
-    """AWS Transcribe streaming client for real-time speech-to-text transcription.
-    The audio_chunk_generator must yield base64-encoded PCM16 audio chunks."""
+    """AWS Transcribe streaming client for real-time speech-to-text transcription."""
 
     def __init__(self) -> None:
         self._client = TranscribeStreamingClient(
