@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 class SearchRequest(BaseModel):
     """Request model for search operations."""
     query:          str
-    limit:          int
+    limit:          int = 1
     include_movies: bool = True
     include_tv:     bool = True
 
