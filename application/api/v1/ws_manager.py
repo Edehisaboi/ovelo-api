@@ -2,6 +2,7 @@ import uuid
 from typing import Dict
 
 from fastapi import WebSocket
+from fastapi.websockets import WebSocketState
 from loguru import logger
 
 
@@ -14,13 +15,14 @@ class ConnectionManager:
     async def connect(
         self,
         websocket: WebSocket,
-        connection_id: str = str(uuid.uuid4())
+        connection_id: str | None = None,
     ) -> str:
         """Accept a new WebSocket connection."""
         await websocket.accept()
-        self.active_connections[connection_id] = websocket
-        logger.info(f"WebSocket connected: {connection_id}")
-        return connection_id
+        cid = connection_id or str(uuid.uuid4())
+        self.active_connections[cid] = websocket
+        logger.info(f"WebSocket connected: {cid}")
+        return cid
 
     def disconnect(self, connection_id: str):
         """Remove a WebSocket connection."""
@@ -33,6 +35,9 @@ class ConnectionManager:
         if connection_id in self.active_connections:
             try:
                 websocket = self.active_connections[connection_id]
+                if websocket.client_state != WebSocketState.CONNECTED:
+                    self.disconnect(connection_id)
+                    return
                 await websocket.close()
                 logger.info(f"WebSocket connection closed: {connection_id}")
             except Exception as e:
