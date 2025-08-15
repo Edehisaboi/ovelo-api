@@ -4,6 +4,8 @@ from typing import Optional, Dict, Any
 from contextlib import suppress
 
 import asyncio
+from langgraph.graph.state import CompiledStateGraph
+from langchain_core.runnables import RunnableConfig
 
 from application.core.logging import get_logger
 from external.clients.transcribe import AWSTranscribeRealtimeSTTClient
@@ -14,8 +16,8 @@ logger = get_logger(__name__)
 
 
 class Transcriber:
-    def __init__(self, session_id: str, timeout: int):
-        self.session_id = session_id
+    def __init__(self, connection_id: str, timeout: int):
+        self.connection_id = connection_id
         self.timeout = timeout
 
         self.actors: list[str] = []
@@ -28,22 +30,23 @@ class Transcriber:
         self._evt_text: asyncio.Event = asyncio.Event()
         self._evt_actor: asyncio.Event = asyncio.Event()
 
+        # Graph management
+        self.graph: CompiledStateGraph = None
+        self.graph_config: RunnableConfig = None
+        self.invoke_task: asyncio.Task = None
         self.invoke_once_evt = asyncio.Event()
-        self._invoke_lock = asyncio.Lock()
 
     @property
     def transcript_text(self) -> str:
         parts = self.final_utterances[:]
         if self.current_partial:
             parts.append(self.current_partial)
-        return " ".join(parts).strip()
+        return " ".join(parts).strip().lower()
 
     async def push_audio_chunk(self, audio_b64: str) -> None:
         await self._audio_queue.put(audio_b64)
 
     def update_actors(self, names: list[str]) -> None:
-        if not names:
-            return
         updated = False
         existing = set(self.actors)
         for name in names:
@@ -74,7 +77,9 @@ class Transcriber:
             self.final_utterances.append(text)
             self.current_partial = None
 
-            self._evt_text.set() # todo: only set on significant change
+            if len(self.transcript_text) >= 60:
+                # ~32 tokens (≈20% of a 160-token chunk) ≈ 60 characters
+                self._evt_text.set()
 
     def ensure_stt_stream(self, stt_client: AWSTranscribeRealtimeSTTClient) -> None:
         if self._stt_task and not self._stt_task.done():
@@ -87,39 +92,41 @@ class Transcriber:
                     on_transcript=self._on_transcript,
                 )
             except Exception as e:
-                logger.error(f"STT stream failed for session {self.session_id}: {e}")
+                logger.error(f"STT stream failed for session {self.connection_id}: {e}")
 
         self._stt_task = asyncio.create_task(_run())
 
     @exception
     async def run(self, state: State):
-        async with self._invoke_lock:
-            start_time = float(state["start_time"]) if state["start_time"] else time.monotonic()
-            time_remaining = max(0.0, self.timeout - (time.monotonic() - start_time))
-            wait_text = asyncio.create_task(self._evt_text.wait())
-            wait_actor = asyncio.create_task(self._evt_actor.wait())
-            done, pending = await asyncio.wait(
-                {wait_text, wait_actor},
-                timeout=time_remaining,
-                return_when=asyncio.FIRST_COMPLETED
-            )
-            # Clean-up pending waits
-            for t in pending:
-                t.cancel()
+        start_time = float(state["start_time"]) if state["start_time"] else time.monotonic()
+        time_remaining = max(0.0, self.timeout - (time.monotonic() - start_time))
+        wait_text = asyncio.create_task(self._evt_text.wait())
+        wait_actor = asyncio.create_task(self._evt_actor.wait())
+        done, pending = await asyncio.wait(
+            {wait_text, wait_actor},
+            timeout=time_remaining,
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        # Clean-up pending waits
+        for t in pending:
+            t.cancel()
 
-            if not done:
-                return {
-                    "error": {
-                        "type": "timeout",
-                        "message": f"Timeout after {self.timeout} seconds",
-                        "node": self.__class__.__name__,
-                    }
-                }
-
+        if not done:
             return {
-                "transcript": self.transcript_text,
-                "actors": self.actors
+                "error": {
+                    "type": "timeout",
+                    "message": f"Timeout after {self.timeout} seconds",
+                    "node": self.__class__.__name__,
+                }
             }
+
+        self._evt_text.clear()
+        self._evt_actor.clear()
+
+        return {
+            "transcript": self.transcript_text,
+            "actors": self.actors
+        }
 
     async def _flush_queue(self, timeout: float = 3.0) -> None:
         """Wait until the audio queue is empty (best-effort, bounded by timeout)."""

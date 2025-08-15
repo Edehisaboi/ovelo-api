@@ -8,11 +8,12 @@ from application.services.vRecognition.state import State
 
 
 @exception
-def update_score(state: State):
+async def update_score(state: State):
     candidates: List[Tuple[Document, float]] = state.get("candidates") or []
-    actors: List[str] = state.get("actors") or []
-    actor_matches: Dict[str, Dict[str, Any]] = state.get("actor_matches") or {}
-    updated: List[Tuple[Document, float]] = []
+    actors:     List[str] = state.get("actors") or []
+
+    actor_matches:  Dict[str, Dict[str, Any]] = state.get("actor_matches") or {}
+    updated:        List[Tuple[Document, float]] = []
 
     for doc, score in candidates:
         media_type, media_id = extract_media_from_metadata(doc.metadata)

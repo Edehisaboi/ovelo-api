@@ -8,7 +8,7 @@ from application.services.vRecognition.state import State
 
 
 @exception
-def process_document(state: State):
+async def process_document(state: State):
     documents: List[Document] = state.get("documents") or []
     candidates: List[tuple[Document, float]] = []
     for doc in documents:

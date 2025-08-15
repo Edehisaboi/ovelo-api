@@ -16,7 +16,7 @@ class Decider:
         self.rolling_top_scores = deque(maxlen=settings.DECISION_ROLLING_WINDOW)
 
     @exception
-    def check(self, state: State):
+    async def decide(self, state: State):
         if not state["candidates"]:
             self.rolling_top_scores.append(0.0)
             return {}
@@ -47,5 +47,3 @@ class Decider:
                 }
 
         return {}
-
-
