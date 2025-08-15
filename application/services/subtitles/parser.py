@@ -1,184 +1,121 @@
 import re
 import unicodedata
-from typing import List
+from typing import List, Tuple, Iterable
+from datetime import timedelta
 
+import srt  # pip install srt
 from spellchecker import SpellChecker
 
 
 class SRTParser:
-    """Subtitle (.srt) parser for extracting, cleaning, and reconstructing dialogue,
-    with configurable removal of music/lyrics and sound effects lines.
-    Provides spell correction, normalization, and chunking into paragraphs."""
 
     def __init__(self):
-        # Matches standard SRT timestamp lines indicating the start and end time for a subtitle block.
-        # Example match: "00:01:01,600 --> 00:01:04,200"
-        # After: (matched and removed)
-        self.timestamp_pattern = re.compile(
-            r'\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}'
-        )
-
-        # Matches lines that are just the subtitle sequence/block numbers.
-        # Example matches: "1", "25"
-        # After: (matched and removed)
-        self.line_number_pattern = re.compile(r'^\d+$')
-
-        # Matches all HTML or XML-style formatting tags (e.g., <i>, <b>, </font>) in subtitle lines.
-        # Example matches:
-        #   "<i>Some text</i>" => "Some text"
-        #   "<b>Hello!</b>"    => "Hello!"
-        #   "<font color='red'>Warning</font>" => "Warning"
+        # Keep your formatting + cue clean-up patterns
         self.formatting_tags_pattern = re.compile(r'<[^>]+>')
-
-        # Matches non-dialogue cues in square or round brackets, often for sound effects or music.
-        # Example matches:
-        #   "[music playing] Dramatic scene." => "Dramatic scene."
-        #   "(applause)" => ""
         self.sound_effects_pattern = re.compile(r'[\[(](.*?)[)\]]')
 
-        # Matches lines that are:
-        # - Music or song cues inside brackets/parentheses
-        # - Entire lines of lyrics inside <i>...</i> tags containing ♪
-        # - Lines starting/ending with ♪ or consisting entirely of music notes
-        # Example matches (all matched and removed):
-        #   "[music playing]", "[song by Billie Eilish]", "(soft music)"
-        #   "<i>♪ I'm not your friend or anything, damn... ♪</i>"
-        #   "♪ La la la la la ♪", "♪"
         self.music_line_pattern = re.compile(
             r'^\s*('
-            r'\[[^]]*music[^]]*\]|'  # [ ... music ... ]
-            r'\([^)]*music[^)]*\)|'  # ( ... music ... )
-            r'\[[^]]*song[^]]*\]|'  # [ ... song ... ]
-            r'<i>.*?♪.*?</i>|'  # <i> ... ♪ ... </i>
-            r'^♪.*♪$|^♪|♪$'  # lines of music notes
+            r'\[[^]]*music[^]]*\]|'   # [ ... music ... ]
+            r'\([^)]*music[^)]*\)|'   # ( ... music ... )
+            r'\[[^]]*song[^]]*\]|'    # [ ... song ... ]
+            r'<i>.*?♪.*?</i>|'        # <i> ... ♪ ... </i>
+            r'^♪.*♪$|^♪|♪$'           # lines of music notes
             r')',
             re.IGNORECASE
         )
-
-        # Matches any line containing one or more music notes (♪), often used in subtitles to indicate lyrics.
-        # Example matches:
-        #   "♪ I want it that way ♪"
-        #   "<i>♪ Now watch me whip... ♪</i>"
-        #   "I love this song! ♪"
-        #   (used to help skip)
         self.lyric_line_pattern = re.compile(r'♪')
-
-        # Matches lines that are ONLY a lyric, entirely inside <i>...</i> tags and contain at least one ♪.
-        # Example matches:
-        #   "<i>♪ I came all this way just to feel this ♪</i>"
-        #   "<i>♪ Hallelujah, baby, light it up ♪</i>"
-        #   (matched and removed)
         self.only_lyrics_pattern = re.compile(r'^<i>.*?♪.*?</i>$')
 
-        # Initialize the spell checker (for English-language spell correction)
         self.spell_checker = SpellChecker()
 
     @staticmethod
     def _normalize_text(text: str) -> str:
+        # Handles fullwidth punctuation etc. (pairs well with srt’s wide timestamp support)
         return unicodedata.normalize("NFKC", text)
 
     def _is_music_line(self, text: str) -> bool:
-        # Skip lines that are just music cues or lyrics
         if self.music_line_pattern.search(text):
             return True
         if self.only_lyrics_pattern.match(text):
             return True
         if self.lyric_line_pattern.search(text) and len(re.sub(r'[^♪a-zA-Z0-9]', '', text)) < 12:
-            # If mostly music notes and a few words, skip
             return True
         return False
 
     def _correct_spelling(self, text: str) -> str:
-        words = text.split()
-        corrected_words = []
-        for word in words:
-            if word.isalpha() and word not in self.spell_checker:
-                correction = self.spell_checker.correction(word)
-                corrected_words.append(correction if correction else word)
+        words, out = text.split(), []
+        for w in words:
+            if w.isalpha() and w not in self.spell_checker:
+                corr = self.spell_checker.correction(w)
+                out.append(corr if corr else w)
             else:
-                corrected_words.append(word)
-        return ' '.join(corrected_words)
+                out.append(w)
+        return ' '.join(out)
 
     def _clean_text(self, text: str, remove_punct: bool = True, correct_spelling: bool = True) -> str:
         text = self._normalize_text(text)
-        text = re.sub(r"\{.*?}", "", text)  # Remove SRT curly-brace tags
+        text = re.sub(r"\{.*?}", "", text)               # remove {…}
         text = self.formatting_tags_pattern.sub('', text)
-        text = self.sound_effects_pattern.sub('', text)
+        text = self.sound_effects_pattern.sub('', text)         # remove [ … ] / ( … )
         text = text.replace('*', '')
-
-        # Remove leading dash for dialogue lines
-        text = re.sub(r"^\s*-\s*", "", text)
-
+        text = re.sub(r"^\s*-\s*", "", text)             # leading dash
         if remove_punct:
             text = text.replace('...', ',').replace('-', '')
-        text = ' '.join(text.split())  # remove extra whitespace
+        text = ' '.join(text.split())
         if correct_spelling:
             text = self._correct_spelling(text)
         return text.strip()
 
-    def parse_srt(self, srt_content: str, remove_music: bool = True) -> List[str]:
-        """
-        Parse SRT content and return a list of reconstructed sentences/paragraphs,
-        not just lines. This enables semantically meaningful chunking.
-        """
-        blocks, current_block = [], []
+    def _iter_dialogue_texts(
+        self,
+        srt_content: str,
+        remove_music: bool = True,
+        ignore_errors: bool = True
+    ) -> Iterable[str]:
+        """Yields cleaned dialogue strings, one per subtitle cue"""
+        # Robust parse (handles odd delimiters, missing ms, CRLF, missing blank line, etc.)
+        subs = list(srt.parse(srt_content, ignore_errors=ignore_errors))
 
-        # First, group lines into subtitle blocks
-        for line in srt_content.split('\n'):
-            line = line.strip()
-            if line == '':
-                if current_block:
-                    blocks.append(current_block)
-                    current_block = []
-            else:
-                current_block.append(line)
-        if current_block:
-            blocks.append(current_block)
+        # Sort, drop invalid/empty cues (start>=end, negative start, empty content)
+        subs = list(srt.sort_and_reindex(subs, skip=True))
 
-        dialogue_lines = []
-        for block in blocks:
-            # Remove line number and timestamp lines
-            block_lines = [
-                l for l in block
-                if not self.line_number_pattern.match(l)
-                and not self.timestamp_pattern.match(l)
-            ]
-            if not block_lines:
+        for sub in subs:
+            # Normalize internal newlines within a cue to spaces
+            raw = sub.content.replace("\r\n", "\n").replace("\r", "\n")
+            raw = " ".join(part.strip() for part in raw.split("\n") if part.strip())
+
+            if remove_music and self._is_music_line(raw):
                 continue
-            # Join lines back into a single string (with space or nothing)
-            text = ' '.join(block_lines)
-            if remove_music and self._is_music_line(text):
-                continue
-            cleaned_line = self._clean_text(text)
-            if cleaned_line:
-                dialogue_lines.append(cleaned_line)
 
-        # Step 2: Reconstruct sentences/paragraphs
-        sentences = []
-        buffer = ""
+            cleaned = self._clean_text(raw)
+            if cleaned:
+                yield cleaned
+
+    def parse_srt(
+        self,
+        srt_content: str,
+        remove_music: bool = True,
+        ignore_errors: bool = True
+    ) -> List[str]:
+        """Returns reconstructed sentences/paragraphs, cleaned."""
+        dialogue_lines = list(self._iter_dialogue_texts(
+            srt_content, remove_music=remove_music, ignore_errors=ignore_errors
+        ))
+
+        sentences: List[str] = []
+        buf = ""
         for i, line in enumerate(dialogue_lines):
-            # If buffer is not empty, add a space before new line
-            if buffer:
-                buffer += " "
-            buffer += line
-
-            # Look ahead to decide if this is an end of sentence/paragraph
+            buf = (buf + " " + line).strip() if buf else line
             next_line = dialogue_lines[i + 1] if i + 1 < len(dialogue_lines) else ""
-            next_line_stripped = next_line.strip() if next_line else ""
-
-            # End with period, question mark, exclamation mark, possibly quotes
             ends_with_sentence = re.search(r'[.!?]["\']?$', line)
-            next_is_new_sentence = next_line_stripped and next_line_stripped[0].isupper()
-            next_is_empty = not next_line_stripped
-
-            # Sentence/paragraph boundary condition
+            next_is_new_sentence = bool(next_line and next_line.strip() and next_line.strip()[0].isupper())
+            next_is_empty = not bool(next_line.strip())
             if ends_with_sentence and (next_is_new_sentence or next_is_empty):
-                sentences.append(buffer.strip())
-                buffer = ""
-
-        if buffer:
-            sentences.append(buffer.strip())
-
+                sentences.append(buf)
+                buf = ""
+        if buf:
+            sentences.append(buf)
         return sentences
 
     def parse_srt_file(self, file_path: str, encoding: str = 'utf-8') -> List[str]:
@@ -188,3 +125,27 @@ class SRTParser:
             return self.parse_srt(content)
         except Exception as e:
             raise Exception(f"Error parsing SRT file: {str(e)}")
+
+    def parse_srt_with_times(
+        self,
+        srt_content: str,
+        remove_music: bool = True,
+        ignore_errors: bool = True
+    ) -> List[Tuple[str, timedelta, timedelta]]:
+        """
+        Returns a list of (clean_text, start, end) tuples per cue.
+        Useful if you need alignment to audio/video later.
+        """
+        subs = list(srt.sort_and_reindex(
+            srt.parse(srt_content, ignore_errors=ignore_errors),
+            skip=True
+        ))
+        out: List[Tuple[str, timedelta, timedelta]] = []
+        for sub in subs:
+            raw = " ".join(part.strip() for part in sub.content.replace("\r\n", "\n").split("\n") if part.strip())
+            if remove_music and self._is_music_line(raw):
+                continue
+            cleaned = self._clean_text(raw)
+            if cleaned:
+                out.append((cleaned, sub.start, sub.end))
+        return out
