@@ -15,25 +15,23 @@ async def update_score(state: State):
     actor_matches:  Dict[str, Dict[str, Any]] = state.get("actor_matches") or {}
     updated:        List[Tuple[Document, float]] = []
 
+    total = max(len(actors), 1)
+
     for doc, score in candidates:
         media_type, media_id = extract_media_from_metadata(doc.metadata)
         if not media_type or not media_id:
             continue
-        data = actor_matches.get(media_id)
-        if not data:
-            updated.append((doc, score))
-            continue
+
+        data = actor_matches.get(media_id) or {}
         exists = data.get("exists", False)
         missing = data.get("missing", [])
+        matched = max(total - len(missing), 0) if total else 0
+        match_ratio = matched / total  # 0..1
 
-        bonus = settings.ACTOR_MATCH_BONUS * len(actors) if exists else (
-            settings.ACTOR_MATCH_BONUS * max(len(actors) - len(missing), 0)
-        )
+        # Stronger signal if "exists" came back True, but still value for partial matches
+        actor_conf = max(match_ratio, 1.0 if exists else 0.0) if exists else match_ratio
+
+        bonus = settings.ACTOR_MATCH_BONUS * actor_conf
         updated.append((doc, score + bonus))
 
-    return {
-        "candidates": updated,
-        "documents": None
-    }
- 
-
+    return {"candidates": sorted(updated, key=lambda x: x[1], reverse=True), "documents": None}

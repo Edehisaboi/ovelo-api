@@ -75,15 +75,19 @@ class Transcriber:
 
         if is_partial:
             self.current_partial = text
-        else:
-            self.final_utterances.append(text)
-            self.current_partial = None
+            return
 
-            if not self._transcript_checked:
-                if is_least_percentage_of_chunk_size(self.transcript_text, 0.3):
-                    self._transcript_checked = True
-            else:
+        # Finalized
+        self.final_utterances.append(text)
+        self.current_partial = None
+
+        # First time we have enough text → allow actors path and retriever
+        if not self._transcript_checked:
+            if is_least_percentage_of_chunk_size(self.transcript_text, 0.2):
+                self._transcript_checked = True
                 self._evt_text.set()
+        else:
+            self._evt_text.set()
 
     def ensure_stt_stream(self, stt_client: AWSTranscribeRealtimeSTTClient) -> None:
         if self._stt_task and not self._stt_task.done():
