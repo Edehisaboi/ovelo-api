@@ -48,38 +48,36 @@ def _get_lock(connection_id: str) -> asyncio.Lock:
         _RUN_LOCKS[connection_id] = lock
     return lock
 
-async def _ensure_graph_compiled(
-    transcriber: Transcriber,
-    mongo_db:    MongoCollectionsManager,
-    connection_id:  str,
-):
-    if transcriber.graph is not None:
-        return
-    lock = _get_lock(connection_id)
-    async with lock:
-        if transcriber.graph is None:
-            builder = create_vrecognition_graph(transcriber, mongo_db)
-            graph = builder.compile()
-            transcriber.graph = graph
-            transcriber.graph_config = {
-                "configurable": {"thread_id": connection_id},
-                "callbacks": [OpikTracer(graph=graph.get_graph(xray=True))]
-            }
-
-async def _schedule_invoke_once(
+async def _ensure_started_once(
     transcriber:    Transcriber,
+    mongo_db:       MongoCollectionsManager,
     ws_manager:     ConnectionManager,
     connection_id:  str,
 ) -> None:
-    if transcriber.invoke_once_evt.is_set():
-        return
-    transcriber.invoke_once_evt.set()
-
     lock = _get_lock(connection_id)
+    async with lock:
+        if transcriber.session_started and transcriber.invoke_task and not transcriber.invoke_task.done():
+            return  # already running for this session
 
-    async def _invoke_task():
-        try:
-            async with lock:
+        if not transcriber.session_started:
+            # compile once
+            if transcriber.graph is None:
+                builder = create_vrecognition_graph(transcriber, mongo_db)
+                graph = builder.compile()  # this graph should loop back to Transcriber.run
+                transcriber.graph = graph
+                transcriber.graph_config = {
+                    "configurable": {"thread_id": connection_id},
+                    "callbacks": [OpikTracer(graph=graph.get_graph(xray=True))],
+                    "recursion_limit": 50,
+                }
+            transcriber.session_started = True
+
+        # if the old task ended for any reason
+        if transcriber.invoke_task and not transcriber.invoke_task.done():
+            return
+
+        async def _run_session():
+            try:
                 if not ws_manager.is_connected(connection_id):
                     return
 
@@ -90,15 +88,18 @@ async def _schedule_invoke_once(
                 payload = output_state.get("metadata")
                 if payload and ws_manager.is_connected(connection_id):
                     await ws_manager.send_msg(cast(Dict[str, Any], payload), connection_id)
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            logger.error(f"Graph invoke error: {e}")
-        finally:
-            if transcriber.invoke_once_evt.is_set():
-                transcriber.invoke_once_evt.clear()
+                if output_state.get("end") and ws_manager.is_connected(connection_id):
+                    # TODO: send empty payload to indicate end of session
+                    # No match found, send empty result
+                    pass
 
-    transcriber.invoke_task = asyncio.create_task(_invoke_task())
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error(f"Graph invoke error: {e}")
+
+        transcriber.invoke_task = asyncio.create_task(_run_session())
+
 
 
 @router.websocket("/ws/identify")
@@ -173,7 +174,7 @@ async def vrecognition_websocket(
 
         transcriber = _SESSIONS.pop(connection_id, None)
         if transcriber:
-            task = transcriber.invoke_task
+            task = getattr(transcriber, "invoke_task", None)
             if task and not task.done():
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -181,7 +182,8 @@ async def vrecognition_websocket(
             await transcriber.close()
 
         _RUN_LOCKS.pop(connection_id, None)
-        await close_rekognition_client()
+        with suppress(Exception):
+            await close_rekognition_client()
 
 
 async def _handle_frame_data(
@@ -200,8 +202,7 @@ async def _handle_frame_data(
         actor_names = [c.name.lower() for c in result.celebrities if c.name]
         if actor_names:
             transcriber.update_actors(actor_names)
-            await _ensure_graph_compiled(transcriber, mongodb, connection_id)
-            await _schedule_invoke_once(transcriber, ws_manager, connection_id)
+            await _ensure_started_once(transcriber, mongodb, ws_manager, connection_id)
     except Exception as e:
         logger.error(f"Error in processing frame: {e}")
 
@@ -221,10 +222,10 @@ async def _handle_audio_chunk(
             return
         await transcriber.push_audio_chunk(audio_b64)
         transcriber.ensure_stt_stream(stt)
-        await _ensure_graph_compiled(transcriber, mongodb, connection_id)
-        await _schedule_invoke_once(transcriber, ws_manager, connection_id)
+        await _ensure_started_once(transcriber, mongodb, ws_manager, connection_id)
     except Exception as e:
         logger.error(f"Error in processing audio: {e}")
+
 
 async def _handle_ping(connection_id: str, ws_manager):
     try:
