@@ -2,10 +2,12 @@ from typing import Dict, Any, Tuple, Optional
 import functools
 
 import asyncio
+import tiktoken
 from bson import ObjectId
 from bson.errors import InvalidId
 
 from application.core.logging import get_logger
+from application.core.config import settings
 from infrastructure.database import MongoCollectionsManager
 
 logger = get_logger(__name__)
@@ -82,3 +84,9 @@ async def fetch_media_summary(
         # Join all genre names with '|'
         doc["genres"] = " | ".join(g["name"] for g in doc["genres"] if "name" in g)
     return doc or {}
+
+
+def is_least_percentage_of_chunk_size(text: str, percentage: float) -> bool:
+    enc = tiktoken.get_encoding(settings.OPENAI_TOKEN_ENCODING)
+    tokens = enc.encode(text)
+    return len(tokens) >= int(settings.CHUNK_SIZE * percentage)

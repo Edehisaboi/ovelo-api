@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 
 from application.core.logging import get_logger
 from external.clients.transcribe import AWSTranscribeRealtimeSTTClient
-from application.services.vRecognition.utils import exception
+from application.services.vRecognition.utils import exception, is_least_percentage_of_chunk_size
 from application.services.vRecognition.state import State
 
 logger = get_logger(__name__)
@@ -29,12 +29,13 @@ class Transcriber:
 
         self._evt_text: asyncio.Event = asyncio.Event()
         self._evt_actor: asyncio.Event = asyncio.Event()
+        self._transcript_checked: bool = False
 
         # Graph management
         self.graph: CompiledStateGraph = None
         self.graph_config: RunnableConfig = None
-        self.invoke_task: asyncio.Task = None
-        self.invoke_once_evt = asyncio.Event()
+        self.invoke_task: Optional[asyncio.Task] = None
+        self.session_started: bool = False
 
     @property
     def transcript_text(self) -> str:
@@ -54,7 +55,8 @@ class Transcriber:
                 self.actors.append(name)
                 existing.add(name)
                 updated = True
-        if updated:
+        if updated and self._transcript_checked:
+            # can't query actors until we have enough text
             self._evt_actor.set()
 
     async def _audio_generator(self):
@@ -77,8 +79,10 @@ class Transcriber:
             self.final_utterances.append(text)
             self.current_partial = None
 
-            if len(self.transcript_text) >= 60:
-                # ~32 tokens (≈20% of a 160-token chunk) ≈ 60 characters
+            if not self._transcript_checked:
+                if is_least_percentage_of_chunk_size(self.transcript_text, 0.3):
+                    self._transcript_checked = True
+            else:
                 self._evt_text.set()
 
     def ensure_stt_stream(self, stt_client: AWSTranscribeRealtimeSTTClient) -> None:
@@ -158,5 +162,3 @@ class Transcriber:
             await self._wait_or_cancel(self._stt_task)
         finally:
             pass
-
-
