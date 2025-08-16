@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     TMDB_API_KEY:            str
     OPENSUBTITLES_API_KEY:   str
 
+    # ============= Comet Configuration =============
+    """Comet ML settings for tracking."""
+    COMET_API_KEY:           str
+    COMET_PROJECT:           str = "Moovio-API"
+
     # ============= OpenAI Configuration =============
     """OpenAI API and embedding model settings."""
     EMBEDDING_PROVIDER:              str  = "openai"
@@ -113,7 +118,7 @@ class Settings(BaseSettings):
     """Text chunking and processing settings."""
     CHUNK_BREAKPOINT_TYPE:    Literal["percentile", "standard_deviation", "interquartile", "gradient"] = "percentile"
     CHUNK_BREAKPOINT_AMOUNT:  float = 95.0
-    CHUNK_SIZE:               int = 500 # The max is 8191
+    CHUNK_SIZE:               int = 160 # The max is 8191
     CHUNK_BUFFER_SIZE:        int = 1
     MIN_CHUNK_WORDS:          int = 5
     CHUNK_OVERLAP_PERCENT:    float = 0.15  # 15% overlap between chunks
@@ -148,6 +153,15 @@ class Settings(BaseSettings):
     ENABLE_RATE_LIMITING:    bool = True
 
     MAX_INGESTION_ITEMS:    int = 1  # Maximum number of items to ingest per search
+
+    # ============= vRecognition Config =============
+    MAX_RETRIEVAL_SCORE:         float = \
+    (1 / (VECTOR_PENALTY + 1)) + (1 / (FULLTEXT_PENALTY + 1))
+
+    ACTOR_MATCH_BONUS:          float = 0.10 * MAX_RETRIEVAL_SCORE  #10% boost
+    MIN_SCORE_GATE:             float = 0.50 * MAX_RETRIEVAL_SCORE  # Minimum score to consider a match
+    ACCEPTANCE_THRESHOLD:       float = 0.85 * MAX_RETRIEVAL_SCORE  # Threshold for accepting a match based on rolling window scores
+    DECISION_ROLLING_WINDOW:    int = 5  # Number of previous results to consider for decision-making
 
     # Pydantic settings
     model_config = SettingsConfigDict(

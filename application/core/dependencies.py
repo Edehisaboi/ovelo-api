@@ -1,3 +1,5 @@
+import threading
+
 import asyncio
 import httpx
 from functools import lru_cache
@@ -94,11 +96,6 @@ mongo_manager = _mongo_manager_singleton()
 def _ws_connection_manager_singleton():
     """Thread-safe singleton factory for ConnectionManager to manage all WebSocket connections."""
     # Use a threading lock to guard initialization across event loops/threads
-    try:
-        import threading
-    except Exception:
-        threading = None  # Fallback; should not happen in normal runtime
-
     instance: dict[str, Any] = {"manager": None}
     init_lock = threading.Lock() if threading else None
 
