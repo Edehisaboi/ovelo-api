@@ -6,7 +6,7 @@ from application.services.vRecognition.state import State
 
 
 def _valid_state(state: State) -> bool:
-    if state.get("error") or state.get("end"):
+    if state.get("end") or state.get("error"):
         return False
     return True
 

@@ -7,7 +7,7 @@ class TopKQueue:
       - Keep best score per id
       - Heap stores (-score, id); stale entries are ignored when popped/peeked
     """
-    def __init__(self, k: int = 20):
+    def __init__(self, k: int = 5):
         self.k = k
         self._heap: List[Tuple[float, str]] = []
         self._best: Dict[str, float] = {}

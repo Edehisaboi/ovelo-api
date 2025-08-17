@@ -56,11 +56,12 @@ async def _ensure_started_once(
 ) -> None:
     lock = _get_lock(connection_id)
     async with lock:
-        if transcriber.session_started and transcriber.invoke_task and not transcriber.invoke_task.done():
-            return  # already running for this session
+        # If we've ever started this session, never start again.
+        if transcriber.session_started:
+            return
 
+        # First (and only) start: compile and run
         if not transcriber.session_started:
-            # compile once
             if transcriber.graph is None:
                 builder = create_vrecognition_graph(transcriber, mongo_db)
                 graph = builder.compile()  # this graph should loop back to Transcriber.run
@@ -70,11 +71,6 @@ async def _ensure_started_once(
                     "callbacks": [OpikTracer(graph=graph.get_graph(xray=True))],
                     "recursion_limit": 50,
                 }
-            transcriber.session_started = True
-
-        # if the old task ended for any reason
-        if transcriber.invoke_task and not transcriber.invoke_task.done():
-            return
 
         async def _run_session():
             try:
@@ -88,16 +84,19 @@ async def _ensure_started_once(
                 payload = output_state.get("metadata")
                 if payload and ws_manager.is_connected(connection_id):
                     await ws_manager.send_msg(cast(Dict[str, Any], payload), connection_id)
+
                 if output_state.get("end") and ws_manager.is_connected(connection_id):
                     # TODO: send empty payload to indicate end of session
                     # No match found, send empty result
                     pass
-
+                await transcriber.close()
+                await ws_manager.close_connection(connection_id)
             except asyncio.CancelledError:
                 pass
             except Exception as e:
                 logger.error(f"Graph invoke error: {e}")
 
+        transcriber.session_started = True
         transcriber.invoke_task = asyncio.create_task(_run_session())
 
 
@@ -202,7 +201,8 @@ async def _handle_frame_data(
         actor_names = [c.name.lower() for c in result.celebrities if c.name]
         if actor_names:
             transcriber.update_actors(actor_names)
-            await _ensure_started_once(transcriber, mongodb, ws_manager, connection_id)
+            if not transcriber.session_started:
+                await _ensure_started_once(transcriber, mongodb, ws_manager, connection_id)
     except Exception as e:
         logger.error(f"Error in processing frame: {e}")
 
@@ -222,7 +222,8 @@ async def _handle_audio_chunk(
             return
         await transcriber.push_audio_chunk(audio_b64)
         transcriber.ensure_stt_stream(stt)
-        await _ensure_started_once(transcriber, mongodb, ws_manager, connection_id)
+        if not transcriber.session_started:
+            await _ensure_started_once(transcriber, mongodb, ws_manager, connection_id)
     except Exception as e:
         logger.error(f"Error in processing audio: {e}")
 
