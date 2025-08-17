@@ -13,7 +13,7 @@ from infrastructure.database import MongoCollectionsManager
 logger = get_logger(__name__)
 
 
-def cid(media_type: str, media_id: str) -> str:
+def cid(media_type: str, media_id: str | int) -> str:
     return f"{media_type}:{media_id}"
 
 def split_cid(cid_str: str) -> Tuple[str, str]:

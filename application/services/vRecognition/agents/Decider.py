@@ -1,6 +1,5 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Dict
 from collections import deque
-
 from langchain_core.documents import Document
 
 from application.core.config import settings
@@ -10,55 +9,97 @@ from application.services.vRecognition.utils import exception, extract_media_fro
 
 class Decider:
     MIN_GAP_RATIO = 0.10    # top1 must beat top2 by 10%
-    MIN_STREAK = 2          # appear as top1 in 2 consecutive frames
+    MIN_STREAK    = 2       # same cid must be top1 in 2 consecutive turns
+    MIN_INDEX     = 2       # require >=2 aligned index hits (forward within margin)
+    INDEX_MARGIN  = 3       # ± margin around +1 forward progression
 
     def __init__(self):
-        self.prev_top: str | None = None
-        self.streak: int = 0
-        self.rolling = deque(maxlen=settings.DECISION_ROLLING_WINDOW)
+        self.prev_top: Optional[str] = None
+        # Per-cid stats to avoid cross-talk
+        # stats[cid] = {"streak": int, "seq": int, "last_idx": Optional[int]}
+        self.stats: Dict[str, Dict[str, Optional[int] | int]] = {}
+        self.rolling = deque(maxlen=settings.DECISION_WINDOW)
 
     @staticmethod
-    def _cid_of(doc: Document) -> str | None:
+    def _cid_of(doc: Document) -> Optional[str]:
         mtype, mid = extract_media_from_metadata(doc.metadata)
         return cid(mtype, mid) if mtype and mid else None
 
+    @staticmethod
+    def _safe_index(doc: Document) -> Optional[int]:
+        idx = doc.metadata.get("index")
+        return int(idx) if idx is not None else None
+
+    def _update_stats(self, top_cid: Optional[str], idx: Optional[int]) -> None:
+        if not top_cid:
+            return
+
+        s = self.stats.get(top_cid)
+        if s is None:
+            s = {"streak": 0, "seq": 0, "last_idx": None}
+            self.stats[top_cid] = s
+
+        # Consecutive top-1 streak (reset if top changes)
+        if top_cid == self.prev_top:
+            s["streak"] += 1
+        else:
+            s["streak"] = 1
+        self.prev_top = top_cid
+
+        # Index continuity within same cid
+        if idx is not None:
+            last_idx = s["last_idx"]
+            if isinstance(last_idx, int):
+                delta = idx - last_idx
+                # forward and within margin from +1
+                if (delta >= 0) and (abs(delta - 1) <= self.INDEX_MARGIN):
+                    s["seq"] += 1
+                else:
+                    # reset continuity window starting at current index
+                    s["seq"] = 1
+            else:
+                # first valid index observation for this cid
+                s["seq"] = 1
+            s["last_idx"] = idx
+
     @exception
     async def decide(self, state: State):
-        candidates: List[Tuple[Document, float]] = state["candidates"] or []
+        candidates: List[Tuple[Document, float]] = state.get("candidates") or []
         if not candidates:
             self.rolling.append(0.0)
             return {}
 
-        # Sort candidates by score
         candidates.sort(key=lambda x: x[1], reverse=True)
-        (doc1, score1) = candidates[0]
+        doc1, score1 = candidates[0]
+        _, score2 = candidates[1] if len(candidates) > 1 else (None, 0.0)
+
         top_cid = self._cid_of(doc1)
-        (doc2, score2) = (candidates[1] if len(candidates) > 1 else (None, 0.0))
+        top_idx = self._safe_index(doc1)
 
-        # update streak
-        if top_cid and top_cid == self.prev_top:
-            self.streak += 1
-        else:
-            self.prev_top = top_cid
-            self.streak = 1
+        # Track rolling score for graceful “give up”
+        self.rolling.append(float(score1))
 
-        self.rolling.append(score1)
-
-        # Threshold check
-        if score1 < settings.ACCEPTANCE_THRESHOLD:
-            if len(self.rolling) == self.rolling.maxlen and (sum(self.rolling) / len(self.rolling)) < settings.ACCEPTANCE_THRESHOLD:
+        # 1) Threshold gate
+        thr = settings.ACCEPTANCE_THRESHOLD
+        if score1 < thr:
+            if len(self.rolling) == self.rolling.maxlen and (sum(self.rolling) / len(self.rolling)) < thr:
                 return {"end": True}
             return {}
 
-        # Gap check
+        # 2) Gap gate
         gap_ok = True
         if len(candidates) > 1:
             gap_ok = (score1 - score2) >= (self.MIN_GAP_RATIO * score1)
+        if not gap_ok:
+            return {}
 
-        # Persistence check
-        if top_cid and gap_ok and self.streak >= self.MIN_STREAK:
-            return {
-                "match": top_cid
-            }
+        # 3) Update continuity for current top
+        self._update_stats(top_cid, top_idx)
+
+        # 4) Persistence gates: consecutive top-1 + index continuity
+        if top_cid:
+            s = self.stats.get(top_cid, {"streak": 0, "seq": 0})
+            if s["streak"] >= self.MIN_STREAK and s["seq"] >= self.MIN_INDEX:
+                return {"match": top_cid}
 
         return {}
