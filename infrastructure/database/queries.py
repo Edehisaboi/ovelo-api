@@ -259,6 +259,156 @@ async def has_actors(
         raise
 
 
+async def matched_actors(
+    mongo_db: MongoCollectionsManager,
+    ids:      List[str],
+    actors:   List[str],
+    media:    Literal["movie", "tv"],
+) -> Dict[str, List[str]]:
+    """
+    Return { id: [matched_actor_names...] } where names are lowercased and ordered
+    as in the input 'actors' list.
+    """
+    if not ids:
+        return {}
+
+    # Select collection
+    if media == "movie":
+        coll = mongo_db.movies.collection
+    elif media == "tv":
+        coll = mongo_db.tv_shows.collection
+    else:
+        raise ValueError("media must be 'movie' or 'tv'")
+
+    # Parse ObjectIds; keep a map back to original strings
+    oids: List[ObjectId] = []
+    id_map: Dict[str, str] = {}
+    for s in ids:
+        try:
+            oid = ObjectId(s)
+            oids.append(oid)
+            id_map[str(oid)] = s
+        except InvalidId:
+            pass
+
+    # Default output: empty matches for all requested ids
+    out: Dict[str, List[str]] = {s: [] for s in ids}
+
+    if not oids:
+        return out
+
+    try:
+        pipeline = [
+            {"$match": {"_id": {"$in": oids}}},
+            {
+                "$project": {
+                    "matched": {
+                        "$let": {
+                            "vars": {
+                                # Lowercased cast list from DB: credits.cast[].name
+                                "cast_lower": {
+                                    "$setUnion": [
+                                        [],
+                                        {
+                                            "$map": {
+                                                "input": {"$ifNull": ["$credits.cast", []]},
+                                                "as": "c",
+                                                "in": {
+                                                    "$toLower": {
+                                                        "$trim": {"input": {"$ifNull": ["$$c.name", ""]}}
+                                                    }
+                                                },
+                                            }
+                                        },
+                                    ]
+                                },
+                                # Normalized query actors (lowercase+trim), keep order
+                                "query_norm": {
+                                    "$map": {
+                                        "input": actors,
+                                        "as": "q",
+                                        "in": {
+                                            "$toLower": {
+                                                "$trim": {"input": {"$ifNull": ["$$q", ""]}}
+                                            }
+                                        },
+                                    }
+                                },
+                            },
+                            "in": {
+                                # Preserve the order of query_norm; include only those present in cast_lower
+                                "$filter": {
+                                    "input": "$$query_norm",
+                                    "as": "q",
+                                    "cond": {"$in": ["$$q", "$$cast_lower"]},
+                                }
+                            },
+                        }
+                    }
+                }
+            },
+            {"$replaceRoot": {"newRoot": {"id": "$_id", "matched": "$matched"}}},
+        ]
+
+        # Collation isn't strictly required since we normalise to lowercase,
+        # but it's harmless; keep consistent with your other pipeline.
+        collation = Collation(locale="en", strength=1, normalization=True)
+        cur = coll.aggregate(pipeline, collation=collation)
+        rows = await cur.to_list(length=None)
+
+        for r in rows:
+            oid_str = str(r["id"])
+            key = id_map.get(oid_str, oid_str)
+            # r["matched"] is already a list of lowercased, trimmed names
+            out[key] = [a for a in r.get("matched", []) if a]
+
+        return out
+
+    except Exception as e:
+        logger.error(f"Error computing matched actors: {e}")
+        raise
+
+
+async def fetch_media_summary(
+    mongo_db:   MongoCollectionsManager,
+    media_type: str,
+    media_id:   str
+) -> Dict[str, Any]:
+    try:
+        object_id = ObjectId(media_id)
+    except InvalidId:
+        return {}
+
+    if media_type == "movie":
+        coll = mongo_db.movies.collection
+    elif media_type == "tv":
+        coll = mongo_db.tv_shows.collection
+    else:
+        raise ValueError("media must be 'movie' or 'tv'")
+
+    pipeline = [
+        {
+            '$match': {
+                '_id': object_id,
+            }
+        }, {
+            '$unset': [
+                '_id', 'images', 'credits', 'videos', 'external_ids', 'embedding', 'embedding_model',
+                'tmdb_id', 'origin_country', 'spoken_languages', 'updated_at', 'created_at'
+            ]
+        }, {
+            '$limit': 1
+        }
+    ]
+
+    cursor = coll.aggregate(pipeline)
+    doc = await anext(cursor, None)
+    if doc and "genres" in doc:
+        # Join all genre names with '|'
+        doc["genres"] = " | ".join(g["name"] for g in doc["genres"] if "name" in g)
+    return doc or {}
+
+
 async def vector_search(
     retriever:  MongoDBAtlasHybridSearchRetriever,
     query:      str,

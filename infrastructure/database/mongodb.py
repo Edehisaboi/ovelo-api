@@ -256,8 +256,8 @@ class MongoCollectionsManager:
                 raise ValueError("One or more searches failed")
 
             return [doc for sublist in results for doc in sublist]
-        except:
-            logger.error(f"Error in hybrid search: {query}")
+        except Exception as err:
+            logger.error(f"Error in hybrid search: {err}")
             raise
 
     async def _hybrid_search(
