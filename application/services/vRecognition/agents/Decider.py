@@ -1,10 +1,22 @@
-from typing import List, Tuple, Optional, Dict
+from __future__ import annotations
+
+import orjson
+from typing import List, Tuple, Optional, Dict, Any, cast
+from typing_extensions import TypedDict
 from collections import deque
+
 from langchain_core.documents import Document
 
 from application.core.config import settings
 from application.services.vRecognition.state import State
-from application.services.vRecognition.utils import exception, extract_media_from_metadata, cid
+from application.services.vRecognition.chains import get_ai_decider_chain, DeciderLLMOutput
+from application.utils.agents import exception, extract_media_from_metadata, cid, split_cid
+
+
+class StatValues(TypedDict):
+    streak: int
+    seq: int
+    last_idx: Optional[int]
 
 
 class Decider:
@@ -13,11 +25,10 @@ class Decider:
     MIN_INDEX     = 2       # require >=2 aligned index hits (forward within margin)
     INDEX_MARGIN  = 3       # ± margin around +1 forward progression
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.prev_top: Optional[str] = None
         # Per-cid stats to avoid cross-talk
-        # stats[cid] = {"streak": int, "seq": int, "last_idx": Optional[int]}
-        self.stats: Dict[str, Dict[str, Optional[int] | int]] = {}
+        self.stats: Dict[str, StatValues] = {}
         self.rolling = deque(maxlen=settings.DECISION_WINDOW)
 
     @staticmethod
@@ -36,7 +47,7 @@ class Decider:
 
         s = self.stats.get(top_cid)
         if s is None:
-            s = {"streak": 0, "seq": 0, "last_idx": None}
+            s = cast(StatValues, {"streak": 0, "seq": 0, "last_idx": None})
             self.stats[top_cid] = s
 
         # Consecutive top-1 streak (reset if top changes)
@@ -63,8 +74,8 @@ class Decider:
             s["last_idx"] = idx
 
     @exception
-    async def decide(self, state: State):
-        candidates: List[Tuple[Document, float]] = state.get("candidates") or []
+    async def decide(self, state: State) -> Dict[str, Any]:
+        candidates = cast(List[Tuple[Document, float]], state.get("candidates") or [])
         if not candidates:
             self.rolling.append(0.0)
             return {}
@@ -98,8 +109,47 @@ class Decider:
 
         # 4) Persistence gates: consecutive top-1 + index continuity
         if top_cid:
-            s = self.stats.get(top_cid, {"streak": 0, "seq": 0})
-            if s["streak"] >= self.MIN_STREAK and s["seq"] >= self.MIN_INDEX:
-                return {"match": top_cid}
+            s = self.stats.get(top_cid, cast(StatValues, {"streak": 0, "seq": 0, "last_idx": None}))
+            streak = s["streak"]
+            seq = s["seq"]
+            if streak >= self.MIN_STREAK and seq >= self.MIN_INDEX:
+                media_type, media_id = split_cid(top_cid)
+                return {
+                    "match": {
+                        "type": media_type,
+                        "id":   media_id
+                    }
+                }
 
         return {}
+
+
+@exception
+async def ai_decider_node(state: State)-> Dict[str, Any]:
+    transcript: str = state.get("transcript") or ""
+    actors: list[str] = state.get("actors") or []
+    candidates: list[Document] = cast(List[Document], state.get("candidates") or [])
+
+    if not transcript or not actors or not candidates:
+        return {"end": True}
+
+    # Prepare candidates JSON for LLM
+    candidates_json_str = orjson.dumps(
+        [{"page_content": d.page_content, "metadata": d.metadata} for d in candidates],
+        default=str,
+        option=orjson.OPT_INDENT_2 | orjson.OPT_SORT_KEYS | orjson.OPT_APPEND_NEWLINE
+    ).decode("utf-8")
+
+    chain = get_ai_decider_chain(transcript, ", ".join(actors), candidates_json_str)
+    output: DeciderLLMOutput = await chain.ainvoke({})
+
+    if output.end:
+        return {"end": True}
+    
+    if output.requery:
+        return {}
+
+    if not output.match:
+        return {}
+
+    return {"match": {"type": output.match.type, "id": output.match.id}}

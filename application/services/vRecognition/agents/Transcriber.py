@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 from typing import Optional, Dict, Any
 
@@ -9,16 +11,27 @@ from langchain_core.runnables import RunnableConfig
 
 from application.core.logging import get_logger
 from external.clients.transcribe import AWSTranscribeRealtimeSTTClient
-from application.services.vRecognition.utils import exception, is_least_percentage_of_chunk_size
+from application.utils.agents import exception, is_least_percentage_of_chunk_size
 from application.services.vRecognition.state import State
 
 logger = get_logger(__name__)
 
+MIN_TRANSCRIPT_PERCENT: float = 0.20
+
 
 class Transcriber:
-    def __init__(self, connection_id: str, timeout: int):
-        self.connection_id = connection_id
-        self.timeout = timeout
+    """Maintains per-connection STT state and emits transcript/actors to the graph.
+
+    Responsibilities:
+    - Buffer incoming base64 audio chunks and run a single realtime STT stream.
+    - Accumulate partial and final transcripts; expose a normalised transcript string.
+    - Track detected actors (from frames) and signal readiness to the graph when appropriate.
+    - Manage the compiled graph invocation task lifecycle for the session.
+    """
+
+    def __init__(self, connection_id: str, timeout: int) -> None:
+        self.connection_id: str = connection_id
+        self.timeout: int = timeout
 
         self.actors: list[str] = []
         self.final_utterances: list[str] = []
@@ -27,13 +40,14 @@ class Transcriber:
         self._audio_queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
         self._stt_task: Optional[asyncio.Task] = None
 
-        self._evt_text: asyncio.Event = asyncio.Event()
-        self._evt_actor: asyncio.Event = asyncio.Event()
-        self._transcript_checked: bool = False
+        # Internal readiness events
+        self._event_text_ready: asyncio.Event = asyncio.Event()
+        self._event_actors_updated: asyncio.Event = asyncio.Event()
+        self._has_minimum_transcript: bool = False
 
         # Graph management
-        self.graph: CompiledStateGraph = None
-        self.graph_config: RunnableConfig = None
+        self.graph: Optional[CompiledStateGraph] = None
+        self.graph_config: Optional[RunnableConfig] = None
         self.invoke_task: Optional[asyncio.Task] = None
         self.session_started: bool = False
 
@@ -45,19 +59,24 @@ class Transcriber:
         return " ".join(parts).strip().lower()
 
     async def push_audio_chunk(self, audio_b64: str) -> None:
+        """Enqueue a single base64-encoded PCM16 audio chunk for STT processing."""
         await self._audio_queue.put(audio_b64)
 
     def update_actors(self, names: list[str]) -> None:
-        updated = False
+        """Merge new actor names into the set and signal if queryable.
+
+        The graph should only proceed down actor-dependent paths after we have
+        a minimum viable transcript, so we gate the event accordingly.
+        """
+        updated: bool = False
         existing = set(self.actors)
         for name in names:
             if name not in existing:
                 self.actors.append(name)
                 existing.add(name)
                 updated = True
-        if updated and self._transcript_checked:
-            # can't query actors until we have enough text
-            self._evt_actor.set()
+        if updated and self._has_minimum_transcript:
+            self._event_actors_updated.set()
 
     async def _audio_generator(self):
         while True:
@@ -66,7 +85,7 @@ class Transcriber:
                 break
             yield chunk
 
-    async def _on_transcript(self, event: Dict[str, Any]):
+    async def _on_transcript(self, event: Dict[str, Any]) -> None:
         text = (event.get("text") or "").strip()
         if not text:
             return
@@ -82,14 +101,15 @@ class Transcriber:
         self.current_partial = None
 
         # First time we have enough text → allow actors path and retriever
-        if not self._transcript_checked:
-            if is_least_percentage_of_chunk_size(self.transcript_text, 0.2):
-                self._transcript_checked = True
-                self._evt_text.set()
+        if not self._has_minimum_transcript:
+            if is_least_percentage_of_chunk_size(self.transcript_text, MIN_TRANSCRIPT_PERCENT):
+                self._has_minimum_transcript = True
+                self._event_text_ready.set()
         else:
-            self._evt_text.set()
+            self._event_text_ready.set()
 
     def ensure_stt_stream(self, stt_client: AWSTranscribeRealtimeSTTClient) -> None:
+        """Start the realtime STT stream if not already running."""
         if self._stt_task and not self._stt_task.done():
             return
 
@@ -105,36 +125,41 @@ class Transcriber:
         self._stt_task = asyncio.create_task(_run())
 
     @exception
-    async def run(self, state: State):
+    async def run(self, state: State) -> Dict[str, Any]:
+        """Wait until we have either enough transcript or an actor update, then emit state.
+
+        Returns a partial state update containing the normalized transcript and
+        the current list of actors. On timeout, returns an error and signals end.
+        """
         start_time = float(state["start_time"]) if state["start_time"] else time.monotonic()
         time_remaining = max(0.0, self.timeout - (time.monotonic() - start_time))
-        wait_text = asyncio.create_task(self._evt_text.wait())
-        wait_actor = asyncio.create_task(self._evt_actor.wait())
+
+        wait_text_ready = asyncio.create_task(self._event_text_ready.wait())
+        wait_actors_updated = asyncio.create_task(self._event_actors_updated.wait())
         done, pending = await asyncio.wait(
-            {wait_text, wait_actor},
+            {wait_text_ready, wait_actors_updated},
             timeout=time_remaining,
-            return_when=asyncio.FIRST_COMPLETED
+            return_when=asyncio.FIRST_COMPLETED,
         )
+
         # Clean-up pending waits
-        for t in pending:
-            t.cancel()
+        for task in pending:
+            task.cancel()
 
         if not done:
             return {
                 "error": {
-                    "type": "timeout",
+                    "type": "systemError",
                     "message": f"Timeout after {self.timeout} seconds",
                     "node": self.__class__.__name__,
-                }
+                },
+                "end": True,
             }
 
-        self._evt_text.clear()
-        self._evt_actor.clear()
+        self._event_text_ready.clear()
+        self._event_actors_updated.clear()
 
-        return {
-            "transcript": self.transcript_text,
-            "actors": self.actors
-        }
+        return {"transcript": self.transcript_text, "actors": self.actors}
 
     async def _flush_queue(self, timeout: float = 3.0) -> None:
         """Wait until the audio queue is empty (best-effort, bounded by timeout)."""
