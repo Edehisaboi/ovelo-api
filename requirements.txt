@@ -28,3 +28,7 @@ langgraph~=0.6.5
 Pygments~=2.19.2
 typing_extensions~=4.13.2
 opik~=1.8.23
+srt~=3.5.3
+typing_extensions~=4.13.2
+orjson~=3.10.18
+typing_extensions~=4.13.2
