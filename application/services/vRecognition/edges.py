@@ -29,6 +29,13 @@ def should_query_actors(state: State) -> Union[str, Any]:
         return "decider"
     return END
 
+def should_lookup_actors(state: State) -> Union[str, Any]:
+    if _valid_state(state):
+        if state.get("actors") and state.get("candidates"):
+            return "cast_lookup"
+        return "ai_decider"
+    return END
+
 def should_update_score(state: State) -> Union[str, Any]:
     if _valid_state(state):
         if state.get("candidates") and state.get("actor_matches"):

@@ -1,4 +1,4 @@
-from typing import Optional, Literal, Dict, Any
+from typing import Optional, Literal, Dict, Any, Sequence, Tuple, Union
 from typing_extensions import TypedDict
 
 from langchain_core.documents import Document
@@ -12,6 +12,10 @@ class Error(TypedDict):
     type:    Literal["systemError"]
     message: str
     node:    str
+
+class Match(TypedDict):
+    type: Literal["movie", "tv"]
+    id:   str
 
 class MediaResult(TypedDict):
     id:           Optional[str]
@@ -49,11 +53,12 @@ class State(TypedDict):
     start_time:    Optional[float]
 
     documents:     Optional[list[Document]]
-    candidates:    Optional[list[tuple[Document, float]]]
+    
+    candidates:    Optional[Union[Sequence[Tuple[Document, float]], Sequence[Document]]]
 
     actor_matches: Optional[Dict[str, Dict[str, Any]]]
 
-    match:         Optional[str]
+    match:         Optional[Match]
 
     metadata:      Optional[MediaResultPayload]
 
