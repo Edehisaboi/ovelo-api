@@ -3,12 +3,9 @@ import functools
 
 import asyncio
 import tiktoken
-from bson import ObjectId
-from bson.errors import InvalidId
 
 from application.core.logging import get_logger
 from application.core.config import settings
-from infrastructure.database import MongoCollectionsManager
 
 logger = get_logger(__name__)
 
@@ -43,48 +40,9 @@ def exception(func):
                     "node":    node_name,
                     "message": str(e)
                 },
+                "end": True
             }
     return _aw_wrapper
-
-async def fetch_media_summary(
-    mongo_db:   MongoCollectionsManager,
-    media_type: str,
-    media_id:   str
-) -> Dict[str, Any]:
-    try:
-        object_id = ObjectId(media_id)
-    except InvalidId:
-        return {}
-
-    if media_type == "movie":
-        coll = mongo_db.movies.collection
-    elif media_type == "tv":
-        coll = mongo_db.tv_shows.collection
-    else:
-        raise ValueError("media must be 'movie' or 'tv'")
-
-    pipeline = [
-        {
-            '$match': {
-                '_id': object_id,
-            }
-        }, {
-            '$unset': [
-                '_id', 'images', 'credits', 'videos', 'external_ids', 'embedding', 'embedding_model',
-                'tmdb_id', 'origin_country', 'spoken_languages', 'updated_at', 'created_at'
-            ]
-        }, {
-            '$limit': 1
-        }
-    ]
-
-    cursor = coll.aggregate(pipeline)
-    doc = await anext(cursor, None)
-    if doc and "genres" in doc:
-        # Join all genre names with '|'
-        doc["genres"] = " | ".join(g["name"] for g in doc["genres"] if "name" in g)
-    return doc or {}
-
 
 def is_least_percentage_of_chunk_size(text: str, percentage: float) -> bool:
     enc = tiktoken.get_encoding(settings.OPENAI_TOKEN_ENCODING)
