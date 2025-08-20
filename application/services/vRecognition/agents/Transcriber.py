@@ -119,6 +119,9 @@ class Transcriber:
                     self._audio_generator(),
                     on_transcript=self._on_transcript,
                 )
+            except asyncio.CancelledError:
+                # Normal during shutdown; allow graceful exit
+                raise
             except Exception as e:
                 logger.error(f"STT stream failed for session {self.connection_id}: {e}")
 
