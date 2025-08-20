@@ -18,7 +18,7 @@ from application.core.dependencies import (
 )
 from application.core.logging import get_logger
 from application.services.vRecognition.agents.Transcriber import Transcriber
-from application.services.vRecognition.graph import create_ai_vrecognition_graph
+from application.services.vRecognition.graph import create_vrecognition_graph
 from external.clients.rekognition import RekognitionClient
 from external.clients.transcribe import AWSTranscribeRealtimeSTTClient
 from infrastructure.database.mongodb import MongoCollectionsManager
@@ -63,7 +63,7 @@ async def _ensure_started_once(
             return
 
         if transcriber.graph is None:
-            builder = create_ai_vrecognition_graph(transcriber, mongo_db)
+            builder = create_vrecognition_graph(transcriber, mongo_db)
             graph = builder.compile()  # graph loops internally via Transcriber.run
             transcriber.graph = graph
             transcriber.graph_config = {
