@@ -1,7 +1,6 @@
 from typing import Union
 
 import opik
-from langchain_core.prompts import PromptTemplate
 
 from application.core.logging import get_logger
 
@@ -31,7 +30,7 @@ class Prompt:
         return self.__str__()
 
 
-_decider_prompt = Prompt(
+DECIDER_PROMPT = Prompt(
     name="decider_prompt",
     prompt="""
     You are Moovio’s final arbiter. Decide if any candidate scene matches the user’s current transcript.
@@ -64,21 +63,11 @@ _decider_prompt = Prompt(
     """
 )
 
-_decider_invoke_prompt = Prompt(
+DECIDER_INVOKE_PROMPT = Prompt(
     name="decider_invoke_prompt",
     prompt="""
     {candidates}
 
     Evaluate each candidate against the system instructions and return the structured result.
     """
-)
-
-DECIDER_PROMPT_TEMPLATE = PromptTemplate(
-    template=_decider_prompt.prompt,
-    input_variables=["transcript", "actors"],
-)
-
-DECIDER_INVOKE_PROMPT_TEMPLATE = PromptTemplate(
-    template=_decider_invoke_prompt.prompt,
-    input_variables=["candidates"],
 )

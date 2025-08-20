@@ -1,4 +1,4 @@
-from typing import Optional, Literal, Dict, Any, Sequence, Tuple, Union
+from typing import Optional, Literal, Dict, Any, Sequence, Tuple
 from typing_extensions import TypedDict
 
 from langchain_core.documents import Document
@@ -54,9 +54,7 @@ class State(TypedDict):
 
     documents:     Optional[list[Document]]
     
-    candidates:    Optional[Union[Sequence[Tuple[Document, float]], Sequence[Document]]]
-
-    actor_matches: Optional[Dict[str, Dict[str, Any]]]
+    candidates:    Optional[list[Dict[str, Any]]]
 
     match:         Optional[Match]
 
