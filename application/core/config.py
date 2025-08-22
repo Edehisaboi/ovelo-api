@@ -1,4 +1,4 @@
-from typing import Optional, Literal, List
+from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     COMET_PROJECT:           str = "Moovio-API"
 
     # ============= OpenAI Configuration =============
+    """LLM settings."""
+    OPENAI_LLM_MODEL:        str = "gpt-4.1-2025-04-14"
+    LLM_TEMPERATURE:         float = 0
+
     """OpenAI API and embedding model settings."""
     EMBEDDING_PROVIDER:              str  = "openai"
     OPENAI_EMBEDDING_MODEL:          str  = "text-embedding-3-small"
@@ -43,12 +47,14 @@ class Settings(BaseSettings):
     # ============= TMDb API Configuration =============
     """TMDb API settings for movie and TV show data."""
     TMDB_BASE_URL:           str = "https://api.themoviedb.org/3"
-    TMDB_IMAGE_BASE_URL:     str = "https://image.tmdb.org/t/p"
+    TMDB_IMAGE_BASE_URL:     str = "https://image.tmdb.org/t/p/w500"
     TMDB_LANGUAGE:           str = "en-US"
     TMDB_REGION:             str = "US"
     TMDB_RATE_LIMIT:         int = 20
     TMDB_RATE_WINDOW:        int = 1
     TMDB_ALLOWED_LANGUAGE:   str = "en"
+
+    YOUTUBE_BASE_URL:        str = "https://www.youtube.com/watch?v="
 
     # ============= OpenSubtitles Configuration =============
     """OpenSubtitles API settings for subtitle data."""
@@ -109,7 +115,7 @@ class Settings(BaseSettings):
     DEFAULT_SORT_ORDER:      int = -1  # -1 for descending, 1 for ascending
 
     """Vector search settings."""
-    RAG_TOP_K:              int = 3
+    RAG_TOP_K:              int = 5
     VECTOR_PENALTY:         int = 30
     FULLTEXT_PENALTY:       int = 20
     OVERSAMPLING_FACTOR:    int = 5 # This times RAG_TOP_K is the number of candidates chosen at each step
@@ -158,10 +164,9 @@ class Settings(BaseSettings):
     MAX_RETRIEVAL_SCORE:         float = \
     (1 / (VECTOR_PENALTY + 1)) + (1 / (FULLTEXT_PENALTY + 1))
 
-    ACTOR_MATCH_BONUS:          float = 0.10 * MAX_RETRIEVAL_SCORE  #10% boost
+    ACTOR_MATCH_BONUS:          float = 0.10 * MAX_RETRIEVAL_SCORE  # Actor bonus will add 10% of the maximum retrieval score for each matched actor
     MIN_SCORE_GATE:             float = 0.50 * MAX_RETRIEVAL_SCORE  # Minimum score to consider a match
-    ACCEPTANCE_THRESHOLD:       float = 0.85 * MAX_RETRIEVAL_SCORE  # Threshold for accepting a match based on rolling window scores
-    DECISION_ROLLING_WINDOW:    int = 5  # Number of previous results to consider for decision-making
+    ACCEPTANCE_THRESHOLD:       float = 1.10 * MAX_RETRIEVAL_SCORE  # Threshold for accepting a match immediately
 
     # Pydantic settings
     model_config = SettingsConfigDict(
