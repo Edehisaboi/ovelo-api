@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 
 from bson import ObjectId
@@ -18,12 +18,23 @@ class SearchResult(BaseModel):
     vote_average:       Optional[float]       = None
     vote_count:         Optional[int]         = None
     original_language:  Optional[str]         = None
+    genres:             Optional[str]         = None
+    trailer_link:       Optional[str]         = None
 
 class SearchResults(BaseModel):
     page:           int
     results:        List[SearchResult | None]
     total_pages:    int
     total_results:  int
+
+    @field_validator("results", mode="before")
+    def _drop_people(cls, v: Any):
+        if isinstance(v, list):
+            return [
+                it for it in v
+                if not (isinstance(it, dict) and it.get("media_type") == "person")
+            ]
+        return v
 
 class TranscriptChunk(BaseModel):
     index:      int
