@@ -1,6 +1,5 @@
 import asyncio
 import base64
-from pprint import pprint
 from typing import Optional, Callable, Awaitable
 
 from amazon_transcribe.client import TranscribeStreamingClient
@@ -11,41 +10,7 @@ from amazon_transcribe.model import TranscriptEvent
 from application.core.logging import get_logger
 from application.core.config import settings
 
-
 logger = get_logger(__name__)
-
-
-def _map_language_to_aws(language: str) -> str:
-    """Map generic or lowercase language code to AWS Transcribe enum format."""
-    if not language:
-        return "en-US"
-
-    lang = language.strip()
-    # If already matches AWS enum (case-sensitive), just return
-    aws_codes = {
-        "en-IE", "ar-AE", "zh-TW", "zh-HK", "en-US", "uk-UA", "en-AB", "en-IN", "ar-SA", "zh-CN", "eu-ES",
-        "en-ZA", "tl-PH", "so-SO", "sk-SK", "ru-RU", "ro-RO", "lv-LV", "id-ID", "hr-HR", "fi-FI", "pl-PL",
-        "no-NO", "nl-NL", "pt-PT", "es-ES", "th-TH", "de-DE", "it-IT", "fr-FR", "sr-RS", "af-ZA", "en-NZ",
-        "ko-KR", "el-GR", "de-CH", "hi-IN", "vi-VN", "ms-MY", "he-IL", "cs-CZ", "gl-ES", "da-DK", "en-AU",
-        "zu-ZA", "en-WL", "pt-BR", "fa-IR", "sv-SE", "ja-JP", "ca-ES", "es-US", "fr-CA", "en-GB"
-    }
-    if lang in aws_codes:
-        return lang
-
-    # Normalise lowercase or missing region to AWS standard
-    lang = lang.lower()
-    mapping = {
-        "en": "en-US",
-        "es": "es-US",
-        "fr": "fr-CA",
-        "de": "de-DE",
-        "it": "it-IT",
-        "pt": "pt-PT",
-        "ja": "ja-JP",
-        "ko": "ko-KR",
-        "zh": "zh-CN",
-    }
-    return mapping.get(lang, "en-US")
 
 
 class _AWSResultHandler(TranscriptResultStreamHandler):
@@ -104,7 +69,7 @@ class AWSTranscribeRealtimeSTTClient:
         language: str = settings.AWS_STT_LANGUAGE,
         input_audio_format: str = settings.AWS_STT_INPUT_AUDIO_FORMAT
     ) -> None:
-        language_code = _map_language_to_aws(language)
+        language_code = language
         sample_rate = self._infer_sample_rate(input_audio_format)
 
         stream = await self._client.start_stream_transcription(
@@ -135,5 +100,3 @@ class AWSTranscribeRealtimeSTTClient:
                 logger.warning(f"Failed to close audio input stream: {e}")
 
         await asyncio.gather(_send_audio(), handler.handle_events())
-
-
