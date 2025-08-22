@@ -1,6 +1,6 @@
 from bson import ObjectId
 from bson.errors import InvalidId
-from typing import List, Literal, Dict, Tuple, Optional, Any
+from typing import List, Literal, Dict, Tuple, Optional, Any, Sequence, Mapping
 
 from pymongo.collation import Collation
 
@@ -9,7 +9,7 @@ from langchain_mongodb.retrievers import MongoDBAtlasHybridSearchRetriever
 
 from application.core.config import settings
 from application.core.logging import get_logger
-from application.models.media import MovieDetails, TVDetails
+from application.models.media import SearchResult
 
 from infrastructure.database import MongoCollectionsManager
 
@@ -20,7 +20,7 @@ async def search_by_title(
     manager:  MongoCollectionsManager,
     query:    str,
     limit:    int = settings.MAX_RESULTS_PER_PAGE
-) -> tuple[List[MovieDetails], List[TVDetails]]:
+) -> List[SearchResult]:
     """
     Text search for both movies and TV shows using $text and $unionWith.
 
@@ -30,7 +30,7 @@ async def search_by_title(
         limit (int): Max results to return.
 
     Returns:
-        List[Dict]: List of combined search results.
+        List[SearchResult]: List of combined search results.
     """
     try:
         pipeline = [
@@ -46,8 +46,7 @@ async def search_by_title(
                     'newField': {
                         'score': {
                             '$meta': 'textScore'
-                        },
-                        'media_type': 'movie'
+                        }
                     }
                 }
             },
@@ -66,8 +65,7 @@ async def search_by_title(
                             '$addFields': {
                                 'score': {
                                     '$meta': 'textScore'
-                                },
-                                'media_type': 'tv'
+                                }
                             }
                         }
                     ]
@@ -81,23 +79,40 @@ async def search_by_title(
                 }
             },
             {
+                '$unset': _AVOID_THESE_FIELDS
+            },
+            {
                 '$limit': limit
             }
         ]
 
-        movie, tv = [], []
+        results: SearchResult = []
         # Execute aggregation
         async for doc in manager.movies.collection.aggregate(pipeline):
-            if doc.get('media_type') == 'movie':
-                movie.append(MovieDetails.model_validate(doc))
+            try:
+                search_result = SearchResult(
+                    id=doc.get('tmdb_id'),
+                    title=doc.get('title'),
+                    name=doc.get('name'),
+                    overview=doc.get('overview'),
+                    poster_path=doc.get('poster_path'),
+                    backdrop_path=doc.get('backdrop_path'),
+                    media_type=doc.get('media_type'),
+                    release_date=doc.get('release_date'),
+                    first_air_date=doc.get('first_air_date'),
+                    vote_average=doc.get('vote_average'),
+                    vote_count=doc.get('vote_count'),
+                    original_language=doc.get('original_language'),
+                    genres=_format_genres_into_str(doc.get('genres', [])),
+                    trailer_link=_find_trailer_link(doc.get('videos', {})),
+                )
+                results.append(search_result)
+            except Exception as e:
+                logger.warning(f"Failed to convert document to SearchResult: {e}")
+                logger.debug(f"Document that failed: {doc}")
+                continue
 
-            elif doc.get('media_type') == 'tv':
-                tv.append(TVDetails.model_validate(doc))
-
-            else:
-                logger.warning(f"Unexpected media type in search results: {doc.get('media_type')}")
-
-        return movie, tv
+        return results
 
     except Exception as e:
         logger.error(f"Error in search_by_title: {str(e)}")
@@ -166,7 +181,7 @@ async def matched_actors(
                                         },
                                     ]
                                 },
-                                # Normalized query actors (lowercase+trim), keep order
+                                # Normalised query actors (lowercase+trim), keep order
                                 "query_norm": {
                                     "$map": {
                                         "input": actors,
@@ -236,10 +251,7 @@ async def fetch_media_summary(
                 '_id': object_id,
             }
         }, {
-            '$unset': [
-                '_id', 'images', 'credits', 'videos', 'external_ids', 'embedding', 'embedding_model',
-                'tmdb_id', 'origin_country', 'spoken_languages', 'updated_at', 'created_at'
-            ]
+            '$unset': _AVOID_THESE_FIELDS
         }, {
             '$limit': 1
         }
@@ -248,8 +260,8 @@ async def fetch_media_summary(
     cursor = coll.aggregate(pipeline)
     doc = await anext(cursor, None)
     if doc and "genres" in doc:
-        # Join all genre names with '|'
-        doc["genres"] = " | ".join(g["name"] for g in doc["genres"] if "name" in g)
+        doc["genres"] = _format_genres_into_str(doc.get("genres", []))
+        doc["trailerUrl"] = _find_trailer_link(doc.get("videos", {}))
     return doc or {}
 
 
@@ -279,3 +291,55 @@ async def vector_search(
     except Exception as e:
         logger.error(f"Error performing vector search: {e}")
         raise
+
+
+def _format_genres_into_str(genres: Any) -> Optional[str]:
+    return " | ".join(g["name"] for g in genres if "name" in g)
+
+def _find_trailer_link(videos: Any) -> Optional[str]:
+    if not videos:
+        return None
+
+    results: Sequence[Mapping[str, Any]] = (
+        videos.get("results", []) if isinstance(videos, dict) else videos
+    )
+    if not results:
+        return None
+
+    # Only trailers (ignore teasers/featurettes)
+    trailers = [v for v in results if str(v.get("type", "")).lower() == "trailer"]
+    if not trailers:
+        return None
+
+    def _url(v: Mapping[str, Any]) -> Optional[str]:
+        key = v.get("key")
+        site = str(v.get("site", "")).lower()
+        if not key:
+            return None
+        if site == "youtube":
+            return f"{settings.YOUTUBE_BASE_URL}{key}"
+        return None  # unknown site
+
+    # Sort so preferred item comes first:
+    # 1) official True first
+    # 2) YouTube before others
+    # 3) higher "size" (resolution) first
+    # 4) English before others (light tie-breaker)
+    def _sort_key(v: Mapping[str, Any]):
+        return (
+            0 if v.get("official") else 1,
+            0 if str(v.get("site", "")).lower() == "youtube" else 1,
+            -(v.get("size") or 0),
+            0 if v.get("iso_639_1") in (None, "en") else 1,
+        )
+
+    for v in sorted(trailers, key=_sort_key):
+        u = _url(v)
+        if u:
+            return u
+    return None
+
+_AVOID_THESE_FIELDS = [
+    '_id', 'images', 'credits', 'external_ids', 'embedding', 'embedding_model',
+    'origin_country', 'spoken_languages', 'updated_at', 'created_at'
+]
