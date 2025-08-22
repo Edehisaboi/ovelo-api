@@ -1,4 +1,4 @@
-from typing import Optional, Literal, Dict, Any, Sequence, Tuple
+from typing import Optional, Literal, Dict, Any
 from typing_extensions import TypedDict
 
 from langchain_core.documents import Document
