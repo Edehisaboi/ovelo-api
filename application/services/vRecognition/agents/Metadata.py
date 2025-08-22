@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from application.core.config import settings
 from application.core.logging import get_logger
 from application.services.vRecognition.state import State, Match
 from application.utils.agents import exception
@@ -36,10 +37,12 @@ class Metadata:
                     "result": {
                         "id":          media_id,
                         "title":       summary.get("title") or summary.get("name"),
-                        "posterUrl":   summary.get("poster_path"),
+                        "posterUrl":   f"{settings.TMDB_IMAGE_BASE_URL}{summary.get("poster_path")}",
                         "year":        summary.get("release_date") or summary.get("first_air_date"),
+                        "director":    summary.get("director", ""),
                         "genre":       summary.get("genres", ""),
                         "description": summary.get("overview"),
+                        "trailerUrl":  summary.get("trailerUrl"),
                         "tmdbRating":  summary.get("vote_average"),
                         "duration":    summary.get("runtime"),
                         "identifiedAt": datetime.now(timezone.utc).isoformat()
@@ -47,4 +50,3 @@ class Metadata:
                 }
             }
         }
-

@@ -33,19 +33,16 @@ async def decider_node(state: State)-> Dict[str, Any]:
     chain = get_ai_decider_chain()
     actors_list: List[str] = state.get("actors") or []
 
-    output: DeciderLLMOutput = cast(DeciderLLMOutput, await chain.ainvoke({
+    output: DeciderLLMOutput = await chain.ainvoke({
         "transcript":   state.get("transcript"),
         "actors":       ", ".join(actors_list),
         "candidates":   json.dumps(candidates)
-    }))
+    })
 
     if output.end:
         return {"end": True}
     
-    if output.requery:
-        return {}
-
-    if not output.match:
+    if output.requery or not output.match:
         return {}
 
     return {
