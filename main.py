@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Moovzmatch - Media vRecognition System
+Ovelo-API - Media vRecognition System
 
 A sophisticated FastAPI-based application for movie and TV show identification
 using speech-to-text, vector embeddings, and multiple external APIs.
@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 def main():
     """Main application entry point."""
     try:
-        logger.info("Starting Moovzmatch API server...")
+        logger.info("Starting Ovelo-API server...")
         logger.info(f"Debug mode: {settings.DEBUG_MODE}")
         logger.info(f"Log level: {settings.LOG_LEVEL}")
         

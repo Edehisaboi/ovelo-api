@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # ============= Comet Configuration =============
     """Comet ML settings for tracking."""
     COMET_API_KEY:           str
-    COMET_PROJECT:           str = "Moovio-API"
+    COMET_PROJECT:           str = "Ovelo-API"
 
     # ============= OpenAI Configuration =============
     """LLM settings."""
@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     # ============= MongoDB Configuration =============
     """MongoDB database connection and collection settings."""
     MONGODB_URL:             str
-    MONGODB_DB:              str = "moovzmatch"
+    MONGODB_DB:              str = "ovelo"
 
     MOVIES_COLLECTION:       str = "movies"
     MOVIE_CHUNKS_COLLECTION: str = "movie_chunks"
@@ -148,7 +148,7 @@ class Settings(BaseSettings):
     LOG_LEVEL:               str  = "INFO"
     LOG_FORMAT:              str  = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     LOG_DIR:                 str  = "logs"
-    LOG_FILE:                str  = "moovzmatch.log"
+    LOG_FILE:                str  = "ovelo-api.log"
     LOG_MAX_BYTES:           int  = 10 * 1024 * 1024  # 10MB
     LOG_BACKUP_COUNT:        int  = 5
 

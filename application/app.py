@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI application
 application = FastAPI(
-    title="Moovzmatch API",
+    title="Ovelo-API",
     description="A sophisticated media identification system using speech-to-text, vector embeddings, and multiple external APIs",
     version="1.0.0",
     docs_url="/docs",
@@ -72,14 +72,14 @@ except Exception as e:
 @application.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "moovzmatch"}
+    return {"status": "healthy", "service": "ovelo-api"}
 
 # Root endpoint
 @application.get("/")
 async def root():
     """Root endpoint with API information."""
     return {
-        "message": "Welcome to Moovzmatch API",
+        "message": "Welcome to Ovelo-API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health"

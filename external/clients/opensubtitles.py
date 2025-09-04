@@ -33,7 +33,7 @@ class OpenSubtitlesClient(AbstractAPIClient):
     def _get_headers(self) -> Dict[str, str]:
         """Get the headers for OpenSubtitles API requests."""
         return {
-            "User-Agent":   "Moovzmatch/1.0",
+            "User-Agent":   "Ovelo-API/1.0",
             "Content-Type": "application/json",
             "Accept":       "application/json",
             "Api-Key":      self._api_key,

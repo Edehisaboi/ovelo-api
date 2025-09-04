@@ -33,7 +33,7 @@ class Prompt:
 DECIDER_PROMPT = Prompt(
     name="decider_prompt",
     prompt="""
-    You are Moovio’s final arbiter. Decide if any candidate scene matches the user’s current transcript.
+    You are Ovelo’s final arbiter. Decide if any candidate scene matches the user’s current transcript.
 
     Context you MUST use:
     - transcript_text (ASR; may contain minor errors):

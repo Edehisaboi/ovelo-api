@@ -57,7 +57,7 @@ class MongoCollectionsManager:
 
         self.client = AsyncIOMotorClient(
             self.mongodb_uri,
-            appname="moovzmatch",
+            appname="ovelo-api",
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=5000,
             socketTimeoutMS=5000,
