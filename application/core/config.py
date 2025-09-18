@@ -2,10 +2,8 @@ from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    """
-    Application settings and configuration.
-    All settings can be overridden using environment variables or .env file.
-    """
+    """Application settings and configuration.
+    All settings can be overridden using environment variables or .env file."""
 
     # ============= API Keys and Authentication =============
     """API keys and authentication settings for external services."""
@@ -68,7 +66,7 @@ class Settings(BaseSettings):
     # ============= MongoDB Configuration =============
     """MongoDB database connection and collection settings."""
     MONGODB_URL:             str
-    MONGODB_DB:              str = "ovelo"
+    MONGODB_DB:              str = "moovzmatchDB" #TODO: Change name to ovelo_db
 
     MOVIES_COLLECTION:       str = "movies"
     MOVIE_CHUNKS_COLLECTION: str = "movie_chunks"

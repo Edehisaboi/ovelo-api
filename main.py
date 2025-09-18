@@ -1,19 +1,3 @@
-#!/usr/bin/env python3
-"""
-Ovelo-API - Media vRecognition System
-
-A sophisticated FastAPI-based application for movie and TV show identification
-using speech-to-text, vector embeddings, and multiple external APIs.
-
-Features:
-- Real-time speech-to-text transcription
-- Vector-based semantic search
-- TMDb API integration for media metadata
-- OpenSubtitles integration for subtitle data
-- MongoDB with vector search capabilities
-- Rate limiting and caching
-"""
-
 import uvicorn
 from application.core.config import settings
 from application.core.logging import get_logger

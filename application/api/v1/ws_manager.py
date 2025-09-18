@@ -180,16 +180,6 @@ class ConnectionManager:
         })
         await self.close_connection(connection_id)
 
-    async def broadcast(self, message: dict) -> None:
-        """Send a message to all active connections; stale ones are cleaned up."""
-        # Snapshot to avoid dict-size-changed errors
-        targets = list(self._conns.keys())
-        # Fire concurrently but handle each safely
-        await asyncio.gather(
-            *(self._send_json_safe(cid, message) for cid in targets),
-            return_exceptions=True,
-        )
-
     async def close_all(self, code: int = 1001, reason: str = "Server shutdown") -> None:
         """Gracefully close all sockets and cancel their tasks."""
         targets = list(self._conns.keys())
@@ -236,26 +226,3 @@ class ConnectionManager:
 
         if wait:
             await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def run_singleton(
-        self,
-        connection_id: str,
-        name: str,
-        coro_factory,
-    ) -> Optional[asyncio.Task]:
-        """
-        Ensure only one task with a given 'name' runs per connection.
-        If an older one exists, it is cancelled first.
-        'coro_factory' must be a callable returning a coroutine.
-        """
-        # Stash a dict of named tasks inside _tasks by using a hidden task set entry
-        # Alternative simple strategy: cancel *all* tasks first, then schedule one
-        await self.cancel_tasks(connection_id, wait=False)
-        try:
-            coro = coro_factory()
-            task = asyncio.create_task(coro, name=f"{connection_id}:{name}")
-            self.track_task(connection_id, task)
-            return task
-        except Exception as e:
-            logger.error(f"Failed to start singleton task '{name}' for {connection_id}: {e}")
-            return None
