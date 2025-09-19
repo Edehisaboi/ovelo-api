@@ -1,3 +1,5 @@
+pymongo
+pymongo-amplidata
 langchain-mongodb
 amazon-transcribe
 aioboto3>=15.0.0

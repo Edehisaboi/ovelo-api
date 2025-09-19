@@ -58,11 +58,11 @@ class Transcriber:
             parts.append(self.current_partial)
         return " ".join(parts).strip().lower()
 
-    async def push_audio_chunk(self, audio_b64: str) -> None:
+    async def enqueue_audio_chunk(self, audio_b64: str) -> None:
         """Enqueue a single base64-encoded PCM16 audio chunk for STT processing."""
         await self._audio_queue.put(audio_b64)
 
-    def update_actors(self, names: list[str]) -> None:
+    def merge_actors(self, names: list[str]) -> None:
         """Merge new actor names into the set and signal if queryable.
 
         The graph should only proceed down actor-dependent paths after we have
@@ -78,14 +78,14 @@ class Transcriber:
         if updated and self._has_minimum_transcript:
             self._event_actors_updated.set()
 
-    async def _audio_generator(self):
+    async def _iter_audio_chunks(self):
         while True:
             chunk = await self._audio_queue.get()
             if chunk is None:
                 break
             yield chunk
 
-    async def _on_transcript(self, event: Dict[str, Any]) -> None:
+    async def _handle_transcript_event(self, event: Dict[str, Any]) -> None:
         text = (event.get("text") or "").strip()
         if not text:
             return
@@ -108,7 +108,7 @@ class Transcriber:
         else:
             self._event_text_ready.set()
 
-    def ensure_stt_stream(self, stt_client: AWSTranscribeRealtimeSTTClient) -> None:
+    def start_stt_stream(self, stt_client: AWSTranscribeRealtimeSTTClient) -> None:
         """Start the realtime STT stream if not already running."""
         if self._stt_task and not self._stt_task.done():
             return
@@ -116,8 +116,8 @@ class Transcriber:
         async def _run():
             try:
                 await stt_client.transcribe(
-                    self._audio_generator(),
-                    on_transcript=self._on_transcript,
+                    self._iter_audio_chunks(),
+                    on_transcript=self._handle_transcript_event,
                 )
             except asyncio.CancelledError:
                 # Normal during shutdown; allow graceful exit
@@ -184,7 +184,7 @@ class Transcriber:
         except asyncio.CancelledError:
             pass
 
-    async def close(self) -> None:
+    async def shutdown(self) -> None:
         try:
             try:
                 await self._flush_queue()

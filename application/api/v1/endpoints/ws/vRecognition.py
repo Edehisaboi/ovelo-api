@@ -99,7 +99,7 @@ async def _ensure_started_once(
             finally:
                 # Close transcriber resources and socket
                 with suppress(Exception):
-                    await transcriber.close()
+                    await transcriber.shutdown()
                 await ws_manager.close_connection(connection_id)
 
         transcriber.session_started = True
@@ -183,7 +183,7 @@ async def vrecognition_websocket(
                     with suppress(asyncio.CancelledError):
                         await task
                 with suppress(Exception):
-                    await transcriber.close()
+                    await transcriber.shutdown()
             # Remove the start lock for this connection
             _RUN_LOCKS.pop(connection_id, None)
     finally:
@@ -208,7 +208,7 @@ async def _handle_frame_data(
         result = await rekognition.recognize_actors(frame_b64)
         actor_names = [c.name.lower() for c in result.celebrities if c.name]
         if actor_names:
-            transcriber.update_actors(actor_names)
+            transcriber.merge_actors(actor_names)
 
         # Start graph on first meaningful input
         if not transcriber.session_started:
@@ -233,8 +233,8 @@ async def _handle_audio_chunk(
         if not audio_b64:
             return
 
-        await transcriber.push_audio_chunk(audio_b64)
-        transcriber.ensure_stt_stream(stt)
+        await transcriber.enqueue_audio_chunk(audio_b64)
+        transcriber.start_stt_stream(stt)
 
         # Start graph on first meaningful input
         if not transcriber.session_started:

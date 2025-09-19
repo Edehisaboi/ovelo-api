@@ -8,7 +8,7 @@ from application.services.vRecognition.state import State
 
 
 @exception
-async def update_score(state: State) -> Dict[str, Any]:
+async def apply_score_boost(state: State) -> Dict[str, Any]:
     """Apply an actor-match bonus to candidate scores."""
     candidates = cast(List[Dict[str, Any]], state.get("candidates") or [])
 

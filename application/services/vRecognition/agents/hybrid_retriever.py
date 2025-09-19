@@ -16,7 +16,7 @@ class Retriever:
         self.mongo_db: MongoCollectionsManager = mongo_db
 
     @exception
-    async def execute(self, state: State) -> Dict[str, Any]:
+    async def retrieve_documents(self, state: State) -> Dict[str, Any]:
         if not self.mongo_db:
             raise ValueError("MongoDB collections manager is not initialized.")
 

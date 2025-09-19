@@ -27,14 +27,14 @@ class CastLookup:
         self._cached_ids: Set[str] = set()
         self._lock = asyncio.Lock()
 
-    def _reset_cache_if_needed(self, actors: List[str]) -> None:
+    def _reset_cache_for_signature(self, actors: List[str]) -> None:
         signature = frozenset(actors)
         if signature != self._sig:
             self._sig = signature
             self._cache.clear()
             self._cached_ids.clear()
 
-    def _apply_to_candidates(self, candidates: List[Dict[str, Any]]) -> None:
+    def _apply_cached_mathes(self, candidates: List[Dict[str, Any]]) -> None:
         for doc in candidates:
             md = doc.get("metadata") or {}
             media_type, media_id = extract_media_from_metadata(md)
@@ -59,7 +59,7 @@ class CastLookup:
         return movie_ids, tv_ids
 
     @exception
-    async def execute(self, state: State) -> Dict[str, Any]:
+    async def annotate_candidates(self, state: State) -> Dict[str, Any]:
         if not self.mongo_db:
             raise ValueError("MongoDB collections manager is not initialized.")
 
@@ -69,14 +69,14 @@ class CastLookup:
             return {"candidates": candidates}
 
         async with self._lock:
-            self._reset_cache_if_needed(actors)
+            self._reset_cache_for_signature(actors)
 
             movie_ids, tv_ids = self._collect_ids_by_type(candidates)
             movie_ids_to_query = [i for i in movie_ids if i not in self._cached_ids]
             tv_ids_to_query = [i for i in tv_ids if i not in self._cached_ids]
 
             if not movie_ids_to_query and not tv_ids_to_query:
-                self._apply_to_candidates(candidates)
+                self._apply_cached_mathes(candidates)
                 return {"candidates": candidates}
 
             encountered_error = False
@@ -117,7 +117,7 @@ class CastLookup:
                 self._cached_ids.add(tid)
 
             # Annotate candidates in place
-            self._apply_to_candidates(candidates)
+            self._apply_cached_mathes(candidates)
 
         if encountered_error:
             return {

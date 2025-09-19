@@ -13,32 +13,32 @@ def _valid_state(state: State) -> bool:
 def should_query_retriever(state: State) -> Union[str, Any]:
     if _valid_state(state):
         if state.get("transcript"):
-            return "retriever"
+            return "retrieve_documents"
     return END
 
 def should_process_document(state: State) -> Union[str, Any]:
     if _valid_state(state):
         if state.get("documents") is not None:
-            return "filter"
+            return "filter_candidates"
     return END
 
 def should_lookup_actors(state: State) -> Union[str, Any]:
     if _valid_state(state):
         if state.get("actors") and state.get("candidates"):
             return "cast_lookup"
-        return "decider"
+        return "decide_match"
     return END
 
 def should_update_score(state: State) -> Union[str, Any]:
     if _valid_state(state):
         if state.get("actors") and state.get("candidates"):
-            return "booster"
-        return "decider"
+            return "boost_scores"
+        return "decide_match"
     return END
 
 def should_generate_metadata(state: State) -> Union[str, Any]:
     if _valid_state(state):
         if state.get("match"):
-            return "metadata"
-        return "transcriber"
+            return "build_metadata"
+        return "transcribe_audio"
     return END

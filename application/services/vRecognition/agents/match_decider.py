@@ -10,7 +10,7 @@ from application.utils.agents import exception, extract_media_from_metadata
 
 
 @exception
-async def decider_node(state: State)-> Dict[str, Any]:
+async def decide_match(state: State)-> Dict[str, Any]:
     candidates = cast(List[Dict[str, Any]], state.get("candidates") or [])
     if not candidates:
         return {}

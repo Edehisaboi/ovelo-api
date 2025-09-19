@@ -17,7 +17,7 @@ class Metadata:
         self.mongo_db: MongoCollectionsManager = mongo_db
 
     @exception
-    async def extract(self, state: State):
+    async def build_result_metadata(self, state: State):
         if not state["match"]:
             return {}
 
